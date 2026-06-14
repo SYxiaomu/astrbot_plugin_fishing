@@ -185,7 +185,7 @@ class FishingService:
                 quality_modifier *= calculate_after_refine(acc_template.bonus_fish_quality_modifier, refine_level= equipped_accessory_instance.refine_level, rarity=acc_template.rarity)
                 quantity_modifier *= calculate_after_refine(acc_template.bonus_fish_quantity_modifier, refine_level= equipped_accessory_instance.refine_level, rarity=acc_template.rarity)
                 rare_chance += calculate_after_refine(acc_template.bonus_rare_fish_chance, refine_level= equipped_accessory_instance.refine_level, rarity=acc_template.rarity)
-                coins_chance += calculate_after_refine(acc_template.bonus_coin_modifier, refine_level= equipped_accessory_instance.refine_level, rarity=acc_template.rarity)
+                coins_chance += (calculate_after_refine(acc_template.bonus_coin_modifier, refine_level= equipped_accessory_instance.refine_level, rarity=acc_template.rarity) - 1.0)
         logger.debug(f"装备饰品加成后： quality_modifier={quality_modifier}, quantity_modifier={quantity_modifier}, rare_chance={rare_chance}, coins_chance={coins_chance}")
         # 获取鱼饵并应用加成
         cur_bait_id = user.current_bait_id
@@ -245,7 +245,8 @@ class FishingService:
                 rare_chance += bait_template.rare_chance_modifier
                 base_success_rate += bait_template.success_rate_modifier
                 garbage_reduction_modifier = bait_template.garbage_reduction_modifier
-                coins_chance += bait_template.value_modifier
+                # 修正：value_modifier 是乘数，需要减去1才是增量
+                coins_chance += (bait_template.value_modifier - 1.0)
         logger.debug(f"使用鱼饵加成后： base_success_rate={base_success_rate}, quality_modifier={quality_modifier}, quantity_modifier={quantity_modifier}, rare_chance={rare_chance}, coins_chance={coins_chance}")
         # 3. 判断是否成功钓到
         if random.random() >= base_success_rate:
@@ -315,6 +316,12 @@ class FishingService:
         # 计算最终属性
         weight = random.randint(fish_template.min_weight, fish_template.max_weight)
         value = fish_template.base_value
+
+        # 应用金币加成乘数（来自饰品的 bonus_coin_modifier）
+        # coins_chance > 0 时，直接增加鱼的基础价值
+        if coins_chance > 0:
+            value = int(value * (1 + coins_chance))
+
 
         # 4.2 按品质加成给予额外品质（重量/价值）奖励
         # 品质加成来自：鱼竿 × 饰品 × 鱼饵（乘法累积）
@@ -389,14 +396,12 @@ class FishingService:
         # 6. 更新数据库
         self.inventory_repo.add_fish_to_inventory(user.user_id, fish_template.fish_id, quantity=total_catches, quality_level=quality_level)
 
-        # 更新用户统计数据
+        # 更新用户统计数据（包含金币加成）
         user.total_fishing_count += total_catches
         user.total_weight_caught += weight
-        # 高品质鱼的统计价值按双倍计算
-        if quality_level == 1:
-            user.total_coins_earned += fish_template.base_value * total_catches * 2
-        else:
-            user.total_coins_earned += fish_template.base_value * total_catches
+        # 计算实际获得的价值（已包含金币加成和品质加成）
+        actual_value_per_fish = value * 2 if quality_level == 1 else value
+        user.total_coins_earned += actual_value_per_fish * total_catches
         user.last_fishing_time = get_now()
         
         # 处理装备耐久度消耗
@@ -457,16 +462,16 @@ class FishingService:
                 "name": fish_template.name,
                 "rarity": fish_template.rarity,
                 "weight": weight,
-                "value": value * 2 if quality_level == 1 else value,  # 高品质鱼双倍价值
+                "value": value * 2 if quality_level == 1 else value,  # 高品质鱼双倍价值（基于已加成的价值）
                 "quality_level": quality_level,  # 添加品质等级
                 "quality_label": "✨高品质" if quality_level == 1 else "普通"  # 添加品质标签
             }
         }
-        
+
         # 添加装备损坏消息
         if equipment_broken_messages:
             result["equipment_broken_messages"] = equipment_broken_messages
-        
+
         return result
 
     def get_user_pokedex(self, user_id: str) -> Dict[str, Any]:

@@ -41,7 +41,7 @@ def get_fish_template(new_fish_list, coins_chance):
     使用标准的加权随机算法从鱼类列表中选择一个模板。
     - 解决了旧算法中存在的边界问题和行为异常的Bug。
     - 逻辑清晰，行为可预测：价值越高的鱼，被选中的基础概率越大。
-    - coins_chance > 0 时，会放大高价值鱼的概率优势。
+    - coins_chance 参数已废弃，金币加成在钓鱼服务中直接应用
     """
     # 边界情况处理：如果列表为空，返回None
     if not new_fish_list:
@@ -51,17 +51,12 @@ def get_fish_template(new_fish_list, coins_chance):
     if len(new_fish_list) == 1:
         return new_fish_list[0]
 
-    # 1. 为列表中的每一条鱼计算其抽选权重
+    # 1. 为列表中的每一条鱼计算其抽选权重（仅基于基础价值）
     weights = []
     for fish in new_fish_list:
         # 保证基础权重至少为1，以防鱼的价值为0或负数
         base_weight = max(fish.base_value, 1)
-        
-        # 应用 coins_chance 加成。
-        # (1 + coins_chance) 是一个简单的放大系数，确保了加成效果。
-        # 例如，如果 coins_chance 是 0.5 (50%)，则权重会乘以 1.5
-        final_weight = base_weight * (1 + coins_chance) 
-        weights.append(final_weight)
+        weights.append(base_weight)
 
     # 2. 使用Python标准库的 random.choices 函数进行加权随机抽样
     #   - new_fish_list: 从这个列表中抽样
