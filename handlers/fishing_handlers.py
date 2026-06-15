@@ -1,9 +1,10 @@
+import os
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api import logger
 from ..core.utils import get_now
 from ..utils import safe_datetime_handler, to_percentage, safe_get_file_path
 from ..draw.pokedex import draw_pokedex
-from astrbot.api.message_components import Image as AstrImage
+# Deleted:from astrbot.api.message_components import Image as AstrImage
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ def _build_fish_message(result, fishing_cost):
         quality_display = ""
         if fish.get('quality_level') == 1:
             quality_display = " ✨高品质"
-        
+
         message = (
             f"🎣 恭喜你钓到了：{fish['name']}{quality_display}\n"
             f"✨稀有度：{'★' * fish['rarity']} \n"
@@ -94,121 +95,41 @@ class FishingHandlers:
         if not result:
             yield event.plain_result("❌ 出错啦！请稍后再试。")
             return
-        yield event.plain_result(_build_fish_message(result, fishing_cost))
 
-    async def auto_fish(self, event: AstrMessageEvent):
-        """自动钓鱼"""
-        user_id = self.plugin._get_effective_user_id(event)
-        result = self.fishing_service.toggle_auto_fishing(user_id)
-        yield event.plain_result(result["message"])
-
-    async def fishing_area(self, event: AstrMessageEvent):
-        """查看当前钓鱼区域"""
-        user_id = self.plugin._get_effective_user_id(event)
-        args = event.message_str.split(" ")
-        if len(args) < 2:
-            result = self.fishing_service.get_user_fishing_zones(user_id)
-            if not result:
-                yield event.plain_result("❌ 出错啦！请稍后再试。")
-                return
-            if not result.get("success"):
-                yield event.plain_result(f"❌ 查看钓鱼区域失败：{result['message']}")
-                return
-            zones = result.get("zones", [])
-            message = "【🌊 钓鱼区域】\n"
-            for zone in zones:
-                status_icons = []
-                if zone["whether_in_use"]:
-                    status_icons.append("✅")
-                if not zone["is_active"]:
-                    status_icons.append("🚫")
-                if zone.get("requires_pass"):
-                    status_icons.append("🔑")
-                status_text = " ".join(status_icons) if status_icons else ""
-                message += (
-                    f"区域名称: {zone['name']} (ID: {zone['zone_id']}) {status_text}\n"
-                )
-                message += f"描述: {zone['description']}\n"
-                message += f"💰 钓鱼消耗: {zone.get('fishing_cost', 10)} 金币/次\n"
-                if zone.get("requires_pass"):
-                    required_item_name = zone.get("required_item_name", "通行证")
-                    message += f"🔑 需要 {required_item_name} 才能进入\n"
-                if zone.get("available_from") or zone.get("available_until"):
-                    message += "⏰ 开放时间: "
-                    if zone.get("available_from") and zone.get("available_until"):
-                        from_time = zone["available_from"].strftime("%Y-%m-%d %H:%M")
-                        until_time = zone["available_until"].strftime("%Y-%m-%d %H:%M")
-                        message += f"{from_time} 至 {until_time}\n"
-                    elif zone.get("available_from"):
-                        from_time = zone["available_from"].strftime("%Y-%m-%d %H:%M")
-                        message += f"{from_time} 开始\n"
-                    elif zone.get("available_until"):
-                        until_time = zone["available_until"].strftime("%Y-%m-%d %H:%M")
-                        message += f"至 {until_time} 结束\n"
-                remaining_rare = max(
-                    0, zone["daily_rare_fish_quota"] - zone["rare_fish_caught_today"]
-                )
-                if zone.get("daily_rare_fish_quota", 0) > 0:
-                    message += f"剩余稀有鱼类数量: {remaining_rare}\n"
-                message += "\n"
-            message += "使用「/钓鱼区域 ID」命令切换钓鱼区域。\n"
-            yield event.plain_result(message)
-            return
-        zone_id = args[1]
-        if not zone_id.isdigit():
-            yield event.plain_result("❌ 钓鱼区域 ID 必须是数字，请检查后重试。")
-            return
-        zone_id = int(zone_id)
-
-        # 动态获取所有有效的区域ID
-        all_zones = self.plugin.fishing_zone_service.get_all_zones()
-        valid_zone_ids = [zone["id"] for zone in all_zones]
-
-        if zone_id not in valid_zone_ids:
-            yield event.plain_result(
-                f"❌ 无效的钓鱼区域 ID。有效ID为: {', '.join(map(str, valid_zone_ids))}"
-            )
-            yield event.plain_result("💡 请使用「/钓鱼区域 <ID>」命令指定区域ID")
-            return
-
-        # 切换用户的钓鱼区域
-        result = self.fishing_service.set_user_fishing_zone(user_id, zone_id)
-        yield event.plain_result(result["message"] if result else "❌ 出错啦！请稍后再试。")
-
-    async def fish_pokedex(self, event: AstrMessageEvent):
-        """查看鱼类图鉴"""
-        user_id = self.plugin._get_effective_user_id(event)
-        args = event.message_str.split()
-        page = 1
-        if len(args) > 1 and args[1].isdigit():
-            page = int(args[1])
-
-        pokedex_data = self.fishing_service.get_user_pokedex(user_id)
-        if not pokedex_data or not pokedex_data.get("success"):
-            yield event.plain_result(
-                f"❌ 查看图鉴失败: {pokedex_data.get('message', '未知错误')}"
-            )
-            return
-
-        pokedex_list = pokedex_data.get("pokedex", [])
-        if not pokedex_list:
-            yield event.plain_result("❌ 您还没有捕捉到任何鱼类，快去钓鱼吧！")
-            return
-
-        user_info = self.plugin.user_repo.get_by_id(user_id)
-
-        # 绘制图片
-        output_path = safe_get_file_path(self.plugin, f"pokedex_{user_id}_page_{page}.png")
-
+        # 生成钓鱼结果图片
         try:
-            await draw_pokedex(
-                pokedex_data,
-                {"nickname": user_info.nickname, "user_id": user_id},
-                output_path,
-                page=page,
-                data_dir=self.plugin.data_dir,
-            )
-            yield event.image_result(output_path)
+            from ..draw.fishing_result import draw_fishing_result_image
+
+            fish = result['fish']
+            coins_modifier = self.inventory_service._calculate_coins_modifier(user)
+
+            fish_data = {
+                'name': fish['name'],
+                'rarity': fish['rarity'],
+                'weight': fish['weight'],
+                'value': fish['value'],
+                'quality_level': fish.get('quality_level', 0),
+                'fish_id': fish.get('fish_id', 0),
+                'quantity': fish.get('quantity', 1)
+            }
+
+            user_data = {
+                'user_id': user_id,
+                'nickname': user.nickname or user_id,
+                'fishing_cost': fishing_cost,
+                'coins_modifier': coins_modifier
+            }
+
+            image = await draw_fishing_result_image(fish_data, user_data)
+            image_path = os.path.join(self.plugin.tmp_dir, "fishing_result.png")
+            image.save(image_path)
+            yield event.image_result(image_path)
+
+            # 如果有装备损坏消息，额外发送文本提示
+            if "equipment_broken_messages" in result:
+                for broken_msg in result["equipment_broken_messages"]:
+                    yield event.plain_result(broken_msg)
         except Exception as e:
-            logger.error(f"绘制图鉴图片失败: {e}", exc_info=e)
-            yield event.plain_result("❌ 绘制图鉴时发生错误，请稍后再试或联系管理员。")
+            logger.error(f"生成钓鱼结果图片时发生错误: {e}", exc_info=True)
+            # 回退到文本消息
+            yield event.plain_result(_build_fish_message(result, fishing_cost))

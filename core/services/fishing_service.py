@@ -464,7 +464,9 @@ class FishingService:
                 "weight": weight,
                 "value": value * 2 if quality_level == 1 else value,  # 高品质鱼双倍价值（基于已加成的价值）
                 "quality_level": quality_level,  # 添加品质等级
-                "quality_label": "✨高品质" if quality_level == 1 else "普通"  # 添加品质标签
+                "quality_label": "✨高品质" if quality_level == 1 else "普通",  # 添加品质标签
+                "fish_id": fish_template.fish_id,  # 添加鱼ID
+                "quantity": total_catches  # 添加数量
             }
         }
 

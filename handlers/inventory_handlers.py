@@ -90,18 +90,54 @@ async def user_backpack(plugin: "FishingPlugin", event: AstrMessageEvent):
 async def pond(plugin: "FishingPlugin", event: AstrMessageEvent):
     """查看用户鱼塘内的鱼"""
     user_id = plugin._get_effective_user_id(event)
-    if pond_fish := plugin.inventory_service.get_user_fish_pond(user_id):
+    user = plugin.user_repo.get_by_id(user_id)
+
+    if not user:
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
+
+    pond_fish = plugin.inventory_service.get_user_fish_pond(user_id)
+
+    if not pond_fish or not pond_fish.get('fishes'):
+        yield event.plain_result("🐟 您的鱼塘是空的，快去钓鱼吧！")
+        return
+
+    try:
+        from ..draw.fish_pond import draw_fish_pond_image
+
+        # 计算金币加成
+        coins_modifier = plugin.inventory_service._calculate_coins_modifier(user)
+
+        # 准备数据
+        pond_data = {
+            'fishes': pond_fish['fishes'],
+            'stats': pond_fish['stats']
+        }
+
+        user_data = {
+            'user_id': user_id,
+            'nickname': user.nickname or user_id,
+            'coins_modifier': coins_modifier
+        }
+
+        # 生成图片
+        image = await draw_fish_pond_image(pond_data, user_data)
+        image_path = os.path.join(plugin.tmp_dir, "fish_pond.png")
+        image.save(image_path)
+        yield event.image_result(image_path)
+    except Exception as e:
+        logger.error(f"生成鱼塘图片时发生错误: {e}", exc_info=True)
+
+        # 回退到文本消息
         fishes = pond_fish["fishes"]
-        # 把fishes按稀有度分组
         fished_by_rarity = {}
         for fish in fishes:
             rarity = fish.get("rarity", "未知")
             if rarity not in fished_by_rarity:
                 fished_by_rarity[rarity] = []
             fished_by_rarity[rarity].append(fish)
-        # 构造输出信息
-        message = "【🐠 鱼塘】：\n"
 
+        message = "【🐠 鱼塘】：\n"
         for rarity in sorted(fished_by_rarity.keys(), reverse=True):
             fish_list = fished_by_rarity[rarity]
             if fish_list:
@@ -109,12 +145,10 @@ async def pond(plugin: "FishingPlugin", event: AstrMessageEvent):
                 for fish in fish_list:
                     fish_id = int(fish.get("fish_id", 0) or 0)
                     quality_level = fish.get('quality_level', 0)
-                    # 生成带品质标识的FID
                     if quality_level == 1:
-                        fcode = f"F{fish_id}H" if fish_id else "F0H"  # H代表✨高品质
+                        fcode = f"F{fish_id}H" if fish_id else "F0H"
                     else:
-                        fcode = f"F{fish_id}" if fish_id else "F0"   # 普通品质
-                    # 显示品质信息
+                        fcode = f"F{fish_id}" if fish_id else "F0"
                     quality_display = ""
                     if quality_level == 1:
                         quality_display = " ✨高品质"
@@ -122,8 +156,6 @@ async def pond(plugin: "FishingPlugin", event: AstrMessageEvent):
         message += f"\n🐟 总鱼数：{pond_fish['stats']['total_count']} 条\n"
         message += f"💰 总价值：{pond_fish['stats']['total_value']} 金币\n"
         yield event.plain_result(message)
-    else:
-        yield event.plain_result("🐟 您的鱼塘是空的，快去钓鱼吧！")
 
 
 async def peek_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -164,9 +196,40 @@ async def peek_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
         return
 
     # 获取目标用户的鱼塘信息
-    if pond_fish := plugin.inventory_service.get_user_fish_pond(target_user_id):
+    pond_fish = plugin.inventory_service.get_user_fish_pond(target_user_id)
+
+    if not pond_fish or not pond_fish.get('fishes'):
+        yield event.plain_result(f"🐟 {target_user.nickname} 的鱼塘是空的！")
+        return
+
+    try:
+        from ..draw.fish_pond import draw_fish_pond_image
+
+        # 计算目标用户的金币加成
+        coins_modifier = plugin.inventory_service._calculate_coins_modifier(target_user)
+
+        # 准备数据
+        pond_data = {
+            'fishes': pond_fish['fishes'],
+            'stats': pond_fish['stats']
+        }
+
+        user_data = {
+            'user_id': target_user_id,
+            'nickname': f"🔍 {target_user.nickname} 的鱼塘",
+            'coins_modifier': coins_modifier
+        }
+
+        # 生成图片
+        image = await draw_fish_pond_image(pond_data, user_data)
+        image_path = os.path.join(plugin.tmp_dir, f"peek_pond_{target_user_id}.png")
+        image.save(image_path)
+        yield event.image_result(image_path)
+    except Exception as e:
+        logger.error(f"生成偷看鱼塘图片时发生错误: {e}", exc_info=True)
+
+        # 回退到文本消息
         fishes = pond_fish["fishes"]
-        # 把fishes按稀有度分组
         fished_by_rarity = {}
         for fish in fishes:
             rarity = fish.get("rarity", "未知")
@@ -174,7 +237,6 @@ async def peek_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
                 fished_by_rarity[rarity] = []
             fished_by_rarity[rarity].append(fish)
 
-        # 构造输出信息
         message = f"【🔍 偷看 {target_user.nickname} 的鱼塘】：\n"
 
         for rarity in sorted(fished_by_rarity.keys(), reverse=True):
@@ -184,12 +246,10 @@ async def peek_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
                 for fish in fish_list:
                     fish_id = int(fish.get("fish_id", 0) or 0)
                     quality_level = fish.get('quality_level', 0)
-                    # 生成带品质标识的FID
                     if quality_level == 1:
-                        fcode = f"F{fish_id}H" if fish_id else "F0H"  # H代表✨高品质
+                        fcode = f"F{fish_id}H" if fish_id else "F0H"
                     else:
-                        fcode = f"F{fish_id}" if fish_id else "F0"   # 普通品质
-                    # 显示品质信息
+                        fcode = f"F{fish_id}" if fish_id else "F0"
                     quality_display = ""
                     if quality_level == 1:
                         quality_display = " ✨高品质"
@@ -198,8 +258,6 @@ async def peek_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
         message += f"\n🐟 总鱼数：{pond_fish['stats']['total_count']} 条\n"
         message += f"💰 总价值：{pond_fish['stats']['total_value']} 金币\n"
         yield event.plain_result(message)
-    else:
-        yield event.plain_result(f"🐟 {target_user.nickname} 的鱼塘是空的！")
 
 
 async def pond_capacity(plugin: "FishingPlugin", event: AstrMessageEvent):

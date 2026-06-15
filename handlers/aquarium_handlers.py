@@ -1,4 +1,6 @@
+import os
 from astrbot.api.event import AstrMessageEvent
+from astrbot.api import logger
 from ..utils import format_rarity_display
 from typing import TYPE_CHECKING
 
@@ -8,7 +10,7 @@ if TYPE_CHECKING:
 
 async def aquarium(self: "FishingPlugin", event: AstrMessageEvent):
     """水族箱主命令：
-    - "水族箱": 显示水族箱列表
+    - "水族箱": 显示水族箱列表（图片）
     - "水族箱 帮助": 显示帮助
     """
     args = event.message_str.strip().split()
@@ -28,42 +30,62 @@ async def aquarium(self: "FishingPlugin", event: AstrMessageEvent):
     stats = result["stats"]
 
     if not fishes:
-        yield event.plain_result("🐠 您的水族箱是空的，快去钓鱼吧！")
+        yield event.plain_result("🐠 您的水族箱是空的，快去添加鱼吧！")
         return
 
-    # 按稀有度分组
-    fishes_by_rarity = {}
-    for fish in fishes:
-        rarity = fish.get("rarity", "未知")
-        if rarity not in fishes_by_rarity:
-            fishes_by_rarity[rarity] = []
-        fishes_by_rarity[rarity].append(fish)
+    try:
+        from ..draw.aquarium import draw_aquarium_image
 
-    # 构造输出信息
-    message = "【🐠 水族箱】：\n"
+        # 准备数据
+        aquarium_data = {
+            'fishes': fishes,
+            'stats': stats
+        }
 
-    for rarity in sorted(fishes_by_rarity.keys(), reverse=True):
-        if fish_list := fishes_by_rarity[rarity]:
-            message += f"\n {format_rarity_display(rarity)}：\n"
-            for fish in fish_list:
-                fish_id = int(fish.get('fish_id', 0) or 0)
-                quality_level = fish.get('quality_level', 0)
-                # 生成带品质标识的FID
-                if quality_level == 1:
-                    fcode = f"F{fish_id}H" if fish_id else "F0H"  # H代表✨高品质
-                else:
-                    fcode = f"F{fish_id}" if fish_id else "F0"   # 普通品质
-                # 显示品质信息
-                quality_display = ""
-                if quality_level == 1:
-                    quality_display = " ✨高品质"
-                message += f"  - {fish['name']}{quality_display} x  {fish['quantity']} （{fish['actual_value']}金币 / 个） ID: {fcode}\n"
+        user = self.user_repo.get_by_id(user_id)
+        user_data = {
+            'user_id': user_id,
+            'nickname': user.nickname if user else user_id
+        }
 
-    message += f"\n🐟 总鱼数：{stats['total_count']} / {stats['capacity']} 条\n"
-    message += f"💰 总价值：{stats['total_value']} 金币\n"
-    message += f"📦 剩余空间：{stats['available_space']} 条\n"
+        # 生成图片
+        image = await draw_aquarium_image(aquarium_data, user_data)
+        image_path = os.path.join(self.tmp_dir, "aquarium.png")
+        image.save(image_path)
+        yield event.image_result(image_path)
+    except Exception as e:
+        logger.error(f"生成水族箱图片时发生错误: {e}", exc_info=True)
 
-    yield event.plain_result(message)
+        # 回退到文本消息
+        fishes_by_rarity = {}
+        for fish in fishes:
+            rarity = fish.get("rarity", "未知")
+            if rarity not in fishes_by_rarity:
+                fishes_by_rarity[rarity] = []
+            fishes_by_rarity[rarity].append(fish)
+
+        message = "【🐠 水族箱】：\n"
+
+        for rarity in sorted(fishes_by_rarity.keys(), reverse=True):
+            if fish_list := fishes_by_rarity[rarity]:
+                message += f"\n {format_rarity_display(rarity)}：\n"
+                for fish in fish_list:
+                    fish_id = int(fish.get('fish_id', 0) or 0)
+                    quality_level = fish.get('quality_level', 0)
+                    if quality_level == 1:
+                        fcode = f"F{fish_id}H" if fish_id else "F0H"
+                    else:
+                        fcode = f"F{fish_id}" if fish_id else "F0"
+                    quality_display = ""
+                    if quality_level == 1:
+                        quality_display = " ✨高品质"
+                    message += f"  - {fish['name']}{quality_display} x  {fish['quantity']} （{fish['actual_value']}金币 / 个） ID: {fcode}\n"
+
+        message += f"\n🐟 总鱼数：{stats['total_count']} / {stats['capacity']} 条\n"
+        message += f"💰 总价值：{stats['total_value']} 金币\n"
+        message += f"📦 剩余空间：{stats['available_space']} 条\n"
+
+        yield event.plain_result(message)
 
 
 async def add_to_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
@@ -109,6 +131,7 @@ async def add_to_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
 
 
 async def remove_from_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
+
     """将鱼从水族箱移回鱼塘"""
     user_id = self._get_effective_user_id(event)
     args = event.message_str.split(" ")
@@ -151,6 +174,7 @@ async def remove_from_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
 
 
 async def upgrade_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
+
     """升级水族箱容量"""
     user_id = self._get_effective_user_id(event)
     # 直接尝试升级，失败时会返回具体原因（包含所需费用）
@@ -160,7 +184,6 @@ async def upgrade_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
         yield event.plain_result(f"✅ {result['message']}")
     else:
         yield event.plain_result(f"❌ {result['message']}")
-
 
     # 过度信息命令删除：在升级操作中按需提示
 

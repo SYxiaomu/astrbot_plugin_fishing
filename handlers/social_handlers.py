@@ -3,9 +3,8 @@ import time
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.core.message.components import At
 from astrbot.api import logger
+from ..utils import parse_target_user_id, parse_amount, sanitize_filename
 from ..draw.rank import draw_fishing_ranking
-from ..utils import parse_target_user_id
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -88,7 +87,6 @@ async def ranking(plugin: "FishingPlugin", event: AstrMessageEvent):
         event, "message_id", f"{user_id_for_filename}_{int(time.time())}"
     )
     # 安全化文件名，移除特殊字符
-    from ..utils import sanitize_filename
     safe_unique_id = sanitize_filename(str(unique_id))
     output_path = os.path.join(plugin.tmp_dir, f"fishing_ranking_{safe_unique_id}.png")
 
@@ -124,7 +122,31 @@ async def steal_fish(plugin: "FishingPlugin", event: AstrMessageEvent):
 
     result = plugin.game_mechanics_service.steal_fish(user_id, target_id)
     if result:
-        yield event.plain_result(result["message"])
+        try:
+            from ..draw.steal_result import draw_steal_result_image
+
+            # 获取用户信息
+            thief = plugin.user_repo.get_by_id(user_id)
+            victim = plugin.user_repo.get_by_id(target_id)
+
+            # 准备数据
+            steal_data = {
+                'success': result.get('success', False),
+                'thief_name': thief.nickname if thief else user_id,
+                'victim_name': victim.nickname if victim else target_id,
+                'message': result.get('message', ''),
+                'stolen_fish': result.get('stolen_fish', [])
+            }
+
+            # 生成图片
+            image = await draw_steal_result_image(steal_data)
+            image_path = os.path.join(plugin.tmp_dir, f"steal_result_{user_id}_{target_id}.png")
+            image.save(image_path)
+            yield event.image_result(image_path)
+        except Exception as e:
+            logger.error(f"生成偷鱼结果图片时发生错误: {e}", exc_info=True)
+            # 回退到文本消息
+            yield event.plain_result(result["message"])
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -162,7 +184,114 @@ async def electric_fish(plugin: "FishingPlugin", event: AstrMessageEvent):
 
     result = plugin.game_mechanics_service.electric_fish(user_id, target_id)
     if result:
-        yield event.plain_result(result["message"])
+        try:
+            from ..draw.electric_fish_result import draw_electric_fish_result_image
+
+            # 获取用户信息
+            thief = plugin.user_repo.get_by_id(user_id)
+            victim = plugin.user_repo.get_by_id(target_id)
+
+            # 准备数据
+            electric_data = {
+                'success': result.get('success', False),
+                'thief_name': thief.nickname if thief else user_id,
+                'victim_name': victim.nickname if victim else target_id,
+                'message': result.get('message', ''),
+                'success_type': '',
+                'stolen_count': 0,
+                'total_value': 0,
+                'stolen_fish': [],
+                'penalty_coins': 0,
+                'success_rate': 0
+            }
+
+            # 从消息中提取成功率
+            message = result.get('message', '')
+            if '本次成功率为' in message:
+                try:
+                    rate_part = message.split('本次成功率为')[1].strip().rstrip('%')
+                    electric_data['success_rate'] = float(rate_part) / 100
+                except:
+                    pass
+
+            if result.get('success'):
+                # 成功情况
+                if '⭐大成功' in message:
+                    electric_data['success_type'] = '⭐大成功'
+                elif '✅普通成功' in message:
+                    electric_data['success_type'] = '✅普通成功'
+                elif '🔹小成功' in message:
+                    electric_data['success_type'] = '🔹小成功'
+
+                # 提取捕获数量和总价值
+                if '捕获了' in message and '条鱼' in message:
+                    try:
+                        count_part = message.split('捕获了')[1].split('条鱼')[0]
+                        electric_data['stolen_count'] = int(count_part)
+                    except:
+                        pass
+
+                if '总价值' in message and '金币' in message:
+                    try:
+                        value_part = message.split('总价值')[1].split('金币')[0].strip()
+                        electric_data['total_value'] = int(value_part)
+                    except:
+                        pass
+
+                # 提取偷到的鱼列表
+                if '分别是：' in message:
+                    try:
+                        fish_list_text = message.split('分别是：')[1].split('。')[0]
+                        fish_items = fish_list_text.split('、')
+                        stolen_fish = []
+                        for item in fish_items:
+                            # 解析格式：【鱼名】x数量
+                            if '【' in item and '】' in item:
+                                name_part = item.split('【')[1].split('】')[0]
+                                quantity = 1
+                                if 'x' in item:
+                                    try:
+                                        quantity = int(item.split('x')[1])
+                                    except:
+                                        pass
+
+                                # 查找鱼的稀有度和价值（需要从数据库获取）
+                                all_fishes = plugin.item_template_repo.get_all_fish()
+                                fish_template = None
+                                for fish in all_fishes:
+                                    if fish.name == name_part:
+                                        fish_template = fish
+                                        break
+
+                                if fish_template:
+                                    stolen_fish.append({
+                                        'name': fish_template.name,
+                                        'quantity': quantity,
+                                        'value': fish_template.base_value,
+                                        'rarity': fish_template.rarity
+                                    })
+
+                        electric_data['stolen_fish'] = stolen_fish
+                    except Exception as e:
+                        logger.error(f"解析电鱼结果时出错: {e}")
+            else:
+                # 失败情况，提取惩罚金币
+                if '损失了' in message and '金币' in message:
+                    try:
+                        penalty_part = message.split('损失了')[1].split('金币')[0].strip()
+                        electric_data['penalty_coins'] = int(penalty_part)
+                    except:
+                        pass
+
+            # 生成图片
+            image = await draw_electric_fish_result_image(electric_data)
+            image_path = os.path.join(plugin.tmp_dir, f"electric_fish_{user_id}_{target_id}.png")
+            image.save(image_path)
+            yield event.image_result(image_path)
+        except Exception as e:
+            logger.error(f"生成电鱼结果图片时发生错误: {e}", exc_info=True)
+            # 回退到文本消息
+            yield event.plain_result(result["message"])
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
