@@ -75,6 +75,7 @@ class SqliteUserRepository(AbstractUserRepository):
             min_wipe_bomb_multiplier=row["min_wipe_bomb_multiplier"] if "min_wipe_bomb_multiplier" in row_keys else None,
 
             auto_fishing_enabled=bool(row["auto_fishing_enabled"]),
+            auto_fishing_start_time=parse_datetime(row["auto_fishing_start_time"]) if "auto_fishing_start_time" in row_keys else None,
             last_fishing_time=parse_datetime(row["last_fishing_time"]),
             last_wipe_bomb_time=parse_datetime(row["last_wipe_bomb_time"]),
             last_steal_time=parse_datetime(row["last_steal_time"]),

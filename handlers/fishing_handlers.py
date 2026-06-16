@@ -4,7 +4,6 @@ from astrbot.api import logger
 from ..core.utils import get_now
 from ..utils import safe_datetime_handler, to_percentage, safe_get_file_path
 from ..draw.pokedex import draw_pokedex
-# Deleted:from astrbot.api.message_components import Image as AstrImage
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -67,6 +66,83 @@ class FishingHandlers:
     def _get_fishing_cost(self, user):
         zone = self.plugin.inventory_repo.get_zone_by_id(user.fishing_zone_id)
         return zone.fishing_cost if zone else 10
+
+    async def auto_fish(self, event: AstrMessageEvent):
+        """切换自动钓鱼状态"""
+        user_id = self.plugin._get_effective_user_id(event)
+        result = self.fishing_service.toggle_auto_fishing(user_id)
+
+        if result["success"]:
+            yield event.plain_result(result["message"])
+        else:
+            yield event.plain_result(result["message"])
+
+    async def fishing_area(self, event: AstrMessageEvent):
+        """查看所有钓鱼区域和切换钓鱼区域。用法：钓鱼区域 [区域编号]"""
+        user_id = self.plugin._get_effective_user_id(event)
+
+        # 获取用户信息
+        user = self.plugin.user_repo.get_by_id(user_id)
+        if not user:
+            yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+            return
+
+        # 解析参数
+        message_str = event.message_str.strip()
+        parts = message_str.split()
+
+        # 如果没有参数，显示所有区域
+        if len(parts) <= 1:
+            zones_info = self.fishing_service.get_user_fishing_zones(user_id)
+            if not zones_info["success"]:
+                yield event.plain_result(f"❌ {zones_info['message']}")
+                return
+
+            zones = zones_info["zones"]
+            current_zone = next((z for z in zones if z["whether_in_use"]), None)
+
+            # 构建消息
+            message = "🗺️ **钓鱼区域列表**\n\n"
+            if current_zone:
+                message += f"📍 当前区域：{current_zone['name']}\n\n"
+
+            for zone in zones:
+                status_icon = "📍" if zone["whether_in_use"] else "⬜"
+                active_icon = "✅" if zone["is_active"] else "❌"
+
+                message += f"{status_icon} {zone['zone_id']}. {zone['name']} {active_icon}\n"
+                message += f"   💰 钓鱼费用：{zone['fishing_cost']} 金币\n"
+
+                if zone["requires_pass"]:
+                    message += f"   🔑 需要通行证：{zone['required_item_name']}\n"
+
+                if zone["daily_rare_fish_quota"] > 0:
+                    remaining = zone["daily_rare_fish_quota"] - zone["rare_fish_caught_today"]
+                    message += f"   🐟 稀有鱼剩余：{remaining}/{zone['daily_rare_fish_quota']}\n"
+
+                if zone["available_from"]:
+                    message += f"   ⏰ 开放时间：{zone['available_from'].strftime('%m-%d %H:%M')}"
+                    if zone["available_until"]:
+                        message += f" ~ {zone['available_until'].strftime('%m-%d %H:%M')}"
+                    message += "\n"
+
+                message += "\n"
+
+            message += "💡 使用 /钓鱼区域 编号 切换到指定区域"
+            yield event.plain_result(message)
+        else:
+            # 有参数，尝试切换区域
+            try:
+                zone_id = int(parts[1])
+            except ValueError:
+                yield event.plain_result("❌ 区域编号必须是数字")
+                return
+
+            result = self.fishing_service.set_user_fishing_zone(user_id, zone_id)
+            if result["success"]:
+                yield event.plain_result(f"✅ {result['message']}")
+            else:
+                yield event.plain_result(f"❌ {result['message']}")
 
     async def fish(self, event: AstrMessageEvent):
         """钓鱼"""

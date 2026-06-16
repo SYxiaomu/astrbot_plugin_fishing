@@ -228,6 +228,7 @@ class User:
 
     # 状态信息
     auto_fishing_enabled: bool = False
+    auto_fishing_start_time: Optional[datetime] = None
     last_fishing_time: Optional[datetime] = None
     last_wipe_bomb_time: Optional[datetime] = None
     last_steal_time: Optional[datetime] = None

@@ -81,17 +81,26 @@ class FishingService:
         Returns:
             一个包含操作结果的字典。
         """
+        from datetime import datetime
         user = self.user_repo.get_by_id(user_id)
         if not user:
             return {"success": False, "message": "❌您还没有注册，请先使用 /注册 命令注册。"}
 
+        # 先判断当前状态，再切换
+        was_enabled = user.auto_fishing_enabled
         user.auto_fishing_enabled = not user.auto_fishing_enabled
-        self.user_repo.update(user)
 
+        # 如果现在是开启状态，记录启动时间
         if user.auto_fishing_enabled:
-            return {"success": True, "message": "🎣 自动钓鱼已开启！"}
+            user.auto_fishing_start_time = datetime.now()
+            self.user_repo.update(user)
+            return {"success": True, "message": "🎣 自动钓鱼已开启！单次最多运行12小时后会自动停止。"}
         else:
+            # 关闭时清空启动时间
+            user.auto_fishing_start_time = None
+            self.user_repo.update(user)
             return {"success": True, "message": "🚫 自动钓鱼已关闭！"}
+
 
     def go_fish(self, user_id: str) -> Dict[str, Any]:
         """
@@ -1087,6 +1096,32 @@ class FishingService:
                     if not user:
                         continue
 
+                    # 检查是否超过12小时
+                    if user.auto_fishing_start_time:
+                        now = get_now()
+                        start_time = user.auto_fishing_start_time
+                        # 确保时区一致
+                        if start_time.tzinfo is None and now.tzinfo is not None:
+                            start_time = start_time.replace(tzinfo=now.tzinfo)
+                        elif start_time.tzinfo is not None and now.tzinfo is None:
+                            now = now.replace(tzinfo=None)
+
+                        elapsed_hours = (now - start_time).total_seconds() / 3600
+                        if elapsed_hours >= 12:
+                            # 超过12小时，自动关闭
+                            user.auto_fishing_enabled = False
+                            user.auto_fishing_start_time = None
+                            self.user_repo.update(user)
+                            logger.info(f"用户 {user_id} 自动钓鱼已超过12小时，已自动关闭")
+
+                            # 发送通知
+                            try:
+                                if self._notifier:
+                                    self._notifier(user_id, "⏰ 您的自动钓鱼已运行满12小时，已自动关闭。如需继续使用，请再次输入 /自动钓鱼 开启。")
+                            except Exception:
+                                pass
+                            continue
+
                     # 检查CD
                     now_ts = get_now().timestamp()
                     last_ts = 0
@@ -1151,7 +1186,7 @@ class FishingService:
                     #      logger.info(f"用户 {user_id} 自动钓鱼失败: {result['message']}")
 
                 # 每轮检查间隔
-                time.sleep(40)
+                time.sleep(60)
 
             except Exception as e:
                 logger.error(f"自动钓鱼任务出错: {e}")
