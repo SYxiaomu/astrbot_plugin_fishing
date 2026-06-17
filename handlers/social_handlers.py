@@ -200,7 +200,7 @@ async def electric_fish(plugin: "FishingPlugin", event: AstrMessageEvent):
                 'success_type': '',
                 'stolen_count': 0,
                 'total_value': 0,
-                'stolen_fish': [],
+                'stolen_fish': result.get('stolen_fish', []),
                 'penalty_coins': 0,
                 'success_rate': 0
             }
@@ -237,43 +237,6 @@ async def electric_fish(plugin: "FishingPlugin", event: AstrMessageEvent):
                         electric_data['total_value'] = int(value_part)
                     except:
                         pass
-
-                # 提取偷到的鱼列表
-                if '分别是：' in message:
-                    try:
-                        fish_list_text = message.split('分别是：')[1].split('。')[0]
-                        fish_items = fish_list_text.split('、')
-                        stolen_fish = []
-                        for item in fish_items:
-                            # 解析格式：【鱼名】x数量
-                            if '【' in item and '】' in item:
-                                name_part = item.split('【')[1].split('】')[0]
-                                quantity = 1
-                                if 'x' in item:
-                                    try:
-                                        quantity = int(item.split('x')[1])
-                                    except:
-                                        pass
-
-                                # 查找鱼的稀有度和价值（需要从数据库获取）
-                                all_fishes = plugin.item_template_repo.get_all_fish()
-                                fish_template = None
-                                for fish in all_fishes:
-                                    if fish.name == name_part:
-                                        fish_template = fish
-                                        break
-
-                                if fish_template:
-                                    stolen_fish.append({
-                                        'name': fish_template.name,
-                                        'quantity': quantity,
-                                        'value': fish_template.base_value,
-                                        'rarity': fish_template.rarity
-                                    })
-
-                        electric_data['stolen_fish'] = stolen_fish
-                    except Exception as e:
-                        logger.error(f"解析电鱼结果时出错: {e}")
             else:
                 # 失败情况，提取惩罚金币
                 if '损失了' in message and '金币' in message:

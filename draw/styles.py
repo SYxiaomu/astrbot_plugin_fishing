@@ -69,12 +69,34 @@ COLOR_CORNER = (255, 255, 255, 80) # 四角装饰颜色
 
 # --- 字体路径 ---
 FONT_PATH_BOLD = os.path.join(os.path.dirname(__file__), "resource", "DouyinSansBold.otf")
+# Emoji 回退字体（使用系统默认或 Noto Sans）
+EMOJI_FONT_PATHS = [
+    # Windows 系统字体
+    "C:/Windows/Fonts/seguiemj.ttf",  # Segoe UI Emoji
+    "C:/Windows/Fonts/symbola.ttf",   # Symbola
+    # macOS 系统字体
+    "/System/Library/Fonts/Apple Color Emoji.ttc",
+    # Linux 系统字体
+    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+]
 
 # --- 字体加载 ---
 def load_font(size):
     try:
         return ImageFont.truetype(FONT_PATH_BOLD, size)
     except IOError:
+        return ImageFont.load_default()
+
+def load_font_with_emoji_fallback(size):
+    """
+    加载字体（只支持中文，不支持 emoji）
+    
+    注意：DouyinSansBold 不支持 emoji 符号，如需显示 emoji 请移除相关字符
+    """
+    # 直接使用 DouyinSansBold（保证中文正常显示）
+    try:
+        return ImageFont.truetype(FONT_PATH_BOLD, size)
+    except Exception:
         return ImageFont.load_default()
 
 FONT_HEADER = load_font(36)    # 标题字体

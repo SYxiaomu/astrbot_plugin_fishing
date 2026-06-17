@@ -205,11 +205,17 @@ def _find_cjk_font() -> Optional[str]:
 class FontWithFallback:
     """
     带自动回退的字体包装类
-    当主字体不支持某个字符时，自动使用系统CJK字体
+    当主字体不支持某个字符时，自动使用系统CJK字体或emoji字体
+    
+    策略：
+    - 中文字符 → 优先使用 DouyinSansBold
+    - Emoji 符号 → 优先使用 Segoe UI Emoji
+    - 其他字符 → 主字体
     """
-    def __init__(self, primary_font: ImageFont.FreeTypeFont, fallback_font: Optional[ImageFont.FreeTypeFont] = None):
+    def __init__(self, primary_font: ImageFont.FreeTypeFont, fallback_font: Optional[ImageFont.FreeTypeFont] = None, emoji_font: Optional[ImageFont.FreeTypeFont] = None):
         self.primary_font = primary_font
         self.fallback_font = fallback_font
+        self.emoji_font = emoji_font
         self._char_cache = {}  # 缓存字符到字体的映射
     
     def _is_cjk_char(self, char: str) -> bool:
@@ -231,57 +237,112 @@ class FontWithFallback:
             0xAC00 <= code <= 0xD7AF     # 韩文音节
         )
     
+    def _is_emoji_char(self, char: str) -> bool:
+        """判断是否为 emoji 字符"""
+        if not char:
+            return False
+        code = ord(char)
+        # 常见的 emoji Unicode 范围
+        return (
+            0x1F300 <= code <= 0x1F9FF or  # Miscellaneous Symbols and Pictographs, Emoticons, etc.
+            0x2600 <= code <= 0x26FF or    # Miscellaneous Symbols
+            0x2700 <= code <= 0x27BF or    # Dingbats
+            0xFE0F == code                 # Variation Selector-16 (emoji presentation)
+        )
+    
     def _get_font_for_char(self, char: str) -> ImageFont.FreeTypeFont:
         """
         选择字符的渲染字体
         
         策略：
-        1. mask 为空 → 回退字体
-        2. CJK 字符且 bbox 无效 → 回退字体
-        3. 其他 → 主字体
+        1. Emoji → 使用 emoji_font（如果有）
+        2. CJK → 使用 fallback_font（如果有）或 primary_font
+        3. 其他 → 优先使用 primary_font，不支持则回退
         """
         if char in self._char_cache:
             return self._char_cache[char]
         
+        # 1. 检查是否为 emoji
+        if self._is_emoji_char(char):
+            if self.emoji_font:
+                try:
+                    mask = self.emoji_font.getmask(char)
+                    if mask.size[0] > 0 and mask.size[1] > 0:
+                        self._char_cache[char] = self.emoji_font
+                        return self.emoji_font
+                except Exception:
+                    pass
+        
+        # 2. 检查是否为 CJK 字符
+        if self._is_cjk_char(char):
+            # CJK 字符优先使用主字体（DouyinSansBold）
+            try:
+                mask = self.primary_font.getmask(char)
+                if mask.size[0] > 0 and mask.size[1] > 0:
+                    bbox = mask.getbbox()
+                    if bbox is None or bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+                        raise ValueError("Invalid bbox")
+                    self._char_cache[char] = self.primary_font
+                    return self.primary_font
+            except Exception:
+                pass
+            
+            # 主字体不支持，尝试回退字体
+            if self.fallback_font:
+                try:
+                    mask = self.fallback_font.getmask(char)
+                    if mask.size[0] > 0 and mask.size[1] > 0:
+                        self._char_cache[char] = self.fallback_font
+                        return self.fallback_font
+                except Exception:
+                    pass
+        
+        # 3. 其他字符，优先使用主字体
         try:
             mask = self.primary_font.getmask(char)
-            
-            # mask 为空说明不支持
-            if mask.size[0] == 0 or mask.size[1] == 0:
-                font = self.fallback_font if self.fallback_font else self.primary_font
-                self._char_cache[char] = font
-                return font
-            
-            # CJK 字符：检查 bbox 是否有效
-            if self._is_cjk_char(char):
-                bbox = mask.getbbox()
-                if bbox is None or bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
-                    font = self.fallback_font if self.fallback_font else self.primary_font
-                    self._char_cache[char] = font
-                    return font
-            
-            # 主字体支持
-            self._char_cache[char] = self.primary_font
-            return self.primary_font
-            
+            if mask.size[0] > 0 and mask.size[1] > 0:
+                self._char_cache[char] = self.primary_font
+                return self.primary_font
         except Exception:
-            # 异常时使用回退字体
-            font = self.fallback_font if self.fallback_font else self.primary_font
-            self._char_cache[char] = font
-            return font
+            pass
+        
+        # 4. 最后回退到 fallback_font
+        if self.fallback_font:
+            try:
+                mask = self.fallback_font.getmask(char)
+                if mask.size[0] > 0 and mask.size[1] > 0:
+                    self._char_cache[char] = self.fallback_font
+                    return self.fallback_font
+            except Exception:
+                pass
+        
+        # 5. 实在不行就用主字体（可能会显示方框）
+        self._char_cache[char] = self.primary_font
+        return self.primary_font
     
     def getmask(self, text, mode="", *args, **kwargs):
-        """获取文本的mask，自动处理回退"""
-        if not self.fallback_font or len(text) == 1:
-            return self.primary_font.getmask(text, mode, *args, **kwargs)
+        """
+        获取文本的mask，自动处理回退
         
-        # 对于多字符文本，需要逐个字符处理
-        # 这里简化处理：如果回退字体存在，尝试使用它
+        对于包含多种字符类型的文本，使用主字体作为基础
+        PIL 会自动处理每个字符的渲染
+        """
+        # 如果有 emoji_font，且文本中包含 emoji，尝试使用 emoji_font
+        if self.emoji_font and any(self._is_emoji_char(c) for c in text):
+            try:
+                return self.emoji_font.getmask(text, mode, *args, **kwargs)
+            except Exception:
+                pass
+        
+        # 默认使用主字体
         try:
             return self.primary_font.getmask(text, mode, *args, **kwargs)
         except Exception:
             if self.fallback_font:
-                return self.fallback_font.getmask(text, mode, *args, **kwargs)
+                try:
+                    return self.fallback_font.getmask(text, mode, *args, **kwargs)
+                except Exception:
+                    pass
             raise
     
     def getbbox(self, text, *args, **kwargs):

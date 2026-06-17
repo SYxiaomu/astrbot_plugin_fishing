@@ -1,5 +1,13 @@
 from astrbot.api.event import filter, AstrMessageEvent
 from ..utils import parse_target_user_id, to_percentage, safe_datetime_handler
+from ..draw.wheel_of_fate import (
+    draw_wheel_of_fate_start, draw_wheel_of_fate_result, draw_wheel_of_fate_help,
+    save_image_to_temp
+)
+from ..draw.wipe_bomb import (
+    draw_wipe_bomb_result, draw_wipe_bomb_history, draw_wipe_bomb_error,
+    save_image_to_temp as save_wb_image
+)
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -286,7 +294,9 @@ async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
     user_id = self._get_effective_user_id(event)
     args = event.message_str.split(" ")
     if len(args) < 2:
-        yield event.plain_result("💸 请指定要擦弹的数量 ID，例如：/擦弹 123456789")
+        image = draw_wipe_bomb_error("请指定要擦弹的金额，例如：/擦弹 1000")
+        image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
+        yield event.image_result(image_path)
         return
     contribution_amount = args[1]
     if contribution_amount in ["allin", "halfin", "梭哈", "梭一半"]:
@@ -294,7 +304,9 @@ async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
         if user := self.user_repo.get_by_id(user_id):
             coins = user.coins
         else:
-            yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+            image = draw_wipe_bomb_error("您还没有注册，请先使用 /注册 命令注册。")
+            image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
+            yield event.image_result(image_path)
             return
         if contribution_amount in ("allin", "梭哈"):
             contribution_amount = coins
@@ -303,44 +315,32 @@ async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
         contribution_amount = str(contribution_amount)
     # 判断是否为int或数字字符串
     if not contribution_amount.isdigit():
-        yield event.plain_result("❌ 擦弹数量必须是数字，请检查后重试。")
+        image = draw_wipe_bomb_error("擦弹金额必须是数字，请检查后重试。")
+        image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
+        yield event.image_result(image_path)
         return
     if result := self.game_mechanics_service.perform_wipe_bomb(
         user_id, int(contribution_amount)
     ):
         if result["success"]:
-            message = ""
-            contribution = result["contribution"]
-            multiplier = result["multiplier"]
-            reward = result["reward"]
-            profit = result["profit"]
-            remaining_today = result["remaining_today"]
-
-            # 格式化倍率，智能精度显示
-            if multiplier < 0.01:
-                # 当倍率小于0.01时，显示4位小数以避免混淆
-                multiplier_formatted = f"{multiplier:.4f}"
-            else:
-                # 正常情况下保留两位小数
-                multiplier_formatted = f"{multiplier:.2f}"
-
-            if multiplier >= 3:
-                message += f"🎰 大成功！你投入 {contribution} 金币，获得了 {multiplier_formatted} 倍奖励！\n 💰 奖励金额：{reward} 金币（盈利：+ {profit}）\n"
-            elif multiplier >= 1:
-                message += f"🎲 你投入 {contribution} 金币，获得了 {multiplier_formatted} 倍奖励！\n 💰 奖励金额：{reward} 金币（盈利：+ {profit}）\n"
-            else:
-                message += f"💥 你投入 {contribution} 金币，获得了 {multiplier_formatted} 倍奖励！\n 💰 奖励金额：{reward} 金币（亏损：- {abs(profit)})\n"
-            message += f"剩余擦弹次数：{remaining_today} 次\n"
-
-            # 如果触发了抑制模式，添加通知信息
-            if "suppression_notice" in result:
-                message += f"\n{result['suppression_notice']}"
-
-            yield event.plain_result(message)
+            image = draw_wipe_bomb_result(
+                contribution=result["contribution"],
+                multiplier=result["multiplier"],
+                reward=result["reward"],
+                profit=result["profit"],
+                remaining_today=result["remaining_today"],
+                suppression_notice=result.get("suppression_notice", "")
+            )
+            image_path = save_wb_image(image, "wipe_bomb_result", self.data_dir)
+            yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"⚠️ 擦弹失败：{result['message']}")
+            image = draw_wipe_bomb_error(result['message'])
+            image_path = save_wb_image(image, "wipe_bomb_fail", self.data_dir)
+            yield event.image_result(image_path)
     else:
-        yield event.plain_result("❌ 出错啦！请稍后再试。")
+        image = draw_wipe_bomb_error("出错啦！请稍后再试。")
+        image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
+        yield event.image_result(image_path)
 
 
 async def wipe_bomb_history(self: "FishingPlugin", event: AstrMessageEvent):
@@ -350,29 +350,28 @@ async def wipe_bomb_history(self: "FishingPlugin", event: AstrMessageEvent):
         if result["success"]:
             history = result.get("logs", [])
             if not history:
-                yield event.plain_result("📜 您还没有擦弹记录。")
+                image = draw_wipe_bomb_error("您还没有擦弹记录。")
+                image_path = save_wb_image(image, "wipe_bomb_history_empty", self.data_dir)
+                yield event.image_result(image_path)
                 return
-            message = "【📜 擦弹记录】\n\n"
+            # 格式化时间戳
             for record in history:
-                # 添加一点emoji
-                message += f"⏱️ 时间: {safe_datetime_handler(record['timestamp'])}\n"
-                message += f"💸 投入: {record['contribution']} 金币, 🎁 奖励: {record['reward']} 金币\n"
-                # 计算盈亏
-                profit = record["reward"] - record["contribution"]
-                profit_text = f"盈利: +{profit}" if profit >= 0 else f"亏损: {profit}"
-                profit_emoji = "📈" if profit >= 0 else "📉"
-
-                if record["multiplier"] >= 3:
-                    message += f"🔥 倍率: {record['multiplier']} ({profit_emoji} {profit_text})\n\n"
-                elif record["multiplier"] >= 1:
-                    message += f"✨ 倍率: {record['multiplier']} ({profit_emoji} {profit_text})\n\n"
+                ts = record.get('timestamp', '')
+                if hasattr(ts, 'strftime'):
+                    record['timestamp'] = ts.strftime("%Y-%m-%d %H:%M:%S")
                 else:
-                    message += f"💔 倍率: {record['multiplier']} ({profit_emoji} {profit_text})\n\n"
-            yield event.plain_result(message)
+                    record['timestamp'] = str(ts)[:19]  # 截取前19个字符 (YYYY-MM-DD HH:MM:SS)
+            image = draw_wipe_bomb_history(history)
+            image_path = save_wb_image(image, "wipe_bomb_history", self.data_dir)
+            yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"❌ 查看擦弹记录失败：{result['message']}")
+            image = draw_wipe_bomb_error(f"查看擦弹记录失败：{result['message']}")
+            image_path = save_wb_image(image, "wipe_bomb_history_fail", self.data_dir)
+            yield event.image_result(image_path)
     else:
-        yield event.plain_result("❌ 出错啦！请稍后再试。")
+        image = draw_wipe_bomb_error("出错啦！请稍后再试。")
+        image_path = save_wb_image(image, "wipe_bomb_history_error", self.data_dir)
+        yield event.image_result(image_path)
 
 
 async def start_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
@@ -381,21 +380,10 @@ async def start_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
     args = event.message_str.split(" ")
 
     if len(args) < 2:
-        config = self.game_mechanics_service.WHEEL_OF_FATE_CONFIG
-        min_fee = config.get("min_entry_fee", 500)
-        max_fee = config.get("max_entry_fee", 50000)
-        timeout = config.get("timeout_seconds", 60)
-        help_message = "--- 🎲 命运之轮 玩法说明 ---\n\n"
-        help_message += "这是一个挑战勇气与运气的游戏！你将面临连续的抉择，幸存得越久，奖励越丰厚，但失败将让你失去一切。\n\n"
-        help_message += f"【玩法】\n使用 `/命运之轮 <金额>` 开始游戏。\n(金额需在 {min_fee} - {max_fee} 之间)\n\n"
-        help_message += f"【规则】\n游戏共10层，每层机器人都会提示你当前的奖金和下一层的成功率。你需要在 {timeout} 秒内回复【继续】或【放弃】来决定你的命运！超时将自动放弃并结算当前奖金。\n\n"
-        help_message += "【概率详情】\n"
-        levels = config.get("levels", [])
-        for i, level in enumerate(levels):
-            rate = int(level.get("success_rate", 0) * 100)
-            help_message += f" - 前往第 {i + 1} 层：{rate}% 成功率\n"
-        help_message += "\n祝你好运，挑战者！"
-        yield event.plain_result(help_message)
+        # 生成帮助图片
+        image = draw_wheel_of_fate_help()
+        image_path = save_image_to_temp(image, "wheel_help", self.data_dir)
+        yield event.image_result(image_path)
         return
 
     entry_fee_str = args[1]
@@ -410,7 +398,18 @@ async def start_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
         user = self.user_repo.get_by_id(user_id)
         user_nickname = user.nickname if user and user.nickname else user_id
         formatted_message = result["message"].replace(f"[CQ:at,qq={user_id}]", f"@{user_nickname}")
-        yield event.plain_result(formatted_message)
+        
+        # 生成结果图片
+        current_coins = user.coins if user else 0
+        if "入场费" in formatted_message or "余额不足" in formatted_message:
+            # 开始游戏失败（余额不足等）
+            image = draw_wheel_of_fate_start(entry_fee, current_coins)
+        else:
+            # 游戏进行中或成功
+            image = draw_wheel_of_fate_result(formatted_message, user_nickname)
+        
+        image_path = save_image_to_temp(image, "wheel_start", self.data_dir)
+        yield event.image_result(image_path)
 
 async def continue_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
     """处理命运之轮的“继续”指令"""
@@ -421,7 +420,11 @@ async def continue_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent)
         user = self.user_repo.get_by_id(user_id)
         user_nickname = user.nickname if user and user.nickname else user_id
         formatted_message = result["message"].replace(f"[CQ:at,qq={user_id}]", f"@{user_nickname}")
-        yield event.plain_result(formatted_message)
+        
+        # 生成结果图片
+        image = draw_wheel_of_fate_result(formatted_message, user_nickname)
+        image_path = save_image_to_temp(image, "wheel_continue", self.data_dir)
+        yield event.image_result(image_path)
 
 async def stop_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
     """处理命运之轮的“放弃”指令"""
@@ -432,7 +435,11 @@ async def stop_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
         user = self.user_repo.get_by_id(user_id)
         user_nickname = user.nickname if user and user.nickname else user_id
         formatted_message = result["message"].replace(f"[CQ:at,qq={user_id}]", f"@{user_nickname}")
-        yield event.plain_result(formatted_message)
+        
+        # 生成结果图片
+        image = draw_wheel_of_fate_result(formatted_message, user_nickname)
+        image_path = save_image_to_temp(image, "wheel_stop", self.data_dir)
+        yield event.image_result(image_path)
 
 async def sicbo(self: "FishingPlugin", event: AstrMessageEvent):
     """处理骰宝游戏指令"""

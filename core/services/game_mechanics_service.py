@@ -431,7 +431,7 @@ class GameMechanicsService:
         }
         
         if suppression_triggered:
-            result["suppression_notice"] = "✨ 天界之力降临！你的惊人运气触发了时空沙漏的平衡法则！为了避免时空扭曲，命运女神暂时调整了概率之流，但宝藏之门依然为你敞开！"
+            result["suppression_notice"] = "天界之力降临！你的惊人运气触发了时空沙漏的平衡法则！为了避免时空扭曲，命运女神暂时调整了概率之流，但宝藏之门依然为你敞开！"
         
         return result
 
@@ -710,7 +710,7 @@ class GameMechanicsService:
         counter_message = ""
         if protection_buff:
             if penetration_buff:
-                counter_message = "⚡ 破灵符的力量穿透了海灵守护！"
+                counter_message = "破灵符的力量穿透了海灵守护！"
             elif shadow_cloak_buff:
                 counter_message = "🌑 暗影斗篷让你在阴影中行动！"
 
@@ -721,9 +721,19 @@ class GameMechanicsService:
             quality_info = "（✨高品质）"
             actual_value = stolen_fish_template.base_value * 2
         
+        stolen_fish_list = [{
+            'name': stolen_fish_template.name,
+            'fish_id': stolen_fish_template.fish_id,
+            'rarity': stolen_fish_template.rarity,
+            'value': actual_value,
+            'quantity': 1,
+            'quality_level': stolen_fish_item.quality_level
+        }]
+
         return {
             "success": True,
             "message": f"{counter_message}✅ 成功从【{victim.nickname}】的鱼塘里偷到了一条{stolen_fish_template.rarity}★【{stolen_fish_template.name}】{quality_info}！价值 {actual_value} 金币",
+            "stolen_fish": stolen_fish_list,
         }
 
     # ============================================================
@@ -822,17 +832,17 @@ class GameMechanicsService:
             # 轻微: 0-20%的max, 中度: 20-50%的max, 严重: 50-80%的max, 毁灭性: 80-100%的max
             relative_penalty = penalty_rate / max_penalty_rate if max_penalty_rate > 0 else 0
             if relative_penalty < 0.2:
-                severity = "⚡ 轻微天罚"
+                severity = "轻微天罚"
             elif relative_penalty < 0.5:
-                severity = "⚡⚡ 中度天罚"
+                severity = "中度天罚"
             elif relative_penalty < 0.8:
-                severity = "⚡⚡⚡ 严重天罚"
+                severity = "严重天罚"
             else:
-                severity = "⚡⚡⚡⚡ 毁灭性天罚"
-            
+                severity = "毁灭性天罚"
+                        
             return {
                 "success": False,
-                "message": f"❌ 电鱼失败！{severity}降临，雷电击中了你，损失了 {penalty_coins} 金币（{penalty_rate*100:.1f}%）！\n💡 本次成功率为 {final_success_rate*100:.1f}%"
+                "message": f"电鱼失败！\n{severity}降临，雷电击中了你，损失了 {penalty_coins} 金币（{penalty_rate*100:.1f}%）！"
             }
 
         # 4. 成功了！根据成功度（roll值）决定收益档次
@@ -855,15 +865,22 @@ class GameMechanicsService:
         else:
             success_type = "🔹小成功"
             multiplier_range = (0.05, 0.10)
-        
+
         # 5. 准备数据：获取鱼模板并将鱼塘扁平化
         fish_templates = {
             item.fish_id: self.item_template_repo.get_fish_by_id(item.fish_id)
             for item in victim_inventory
         }
+        # 构建品质映射：(fish_id, quality_level) -> count
+        quality_map = {}
+        for item in victim_inventory:
+            key = (item.fish_id, item.quality_level)
+            quality_map[key] = quality_map.get(key, 0) + item.quantity
+
+        # 扁平化鱼塘，保留品质信息
         all_fish_in_pond = []
         for item in victim_inventory:
-            all_fish_in_pond.extend([item.fish_id] * item.quantity)
+            all_fish_in_pond.extend([(item.fish_id, item.quality_level)] * item.quantity)
 
         # 6. 决定偷取数量并进行初次完全随机抽样
         num_to_steal = 0
@@ -887,21 +904,21 @@ class GameMechanicsService:
         # 7. 检查并修正高星鱼数量
         high_rarity_caught = []
         low_rarity_caught = []
-        for fish_id in initial_catch:
-            template = fish_templates.get(fish_id)
+        for fish_entry in initial_catch:
+            template = fish_templates.get(fish_entry[0])
             if template and template.rarity >= 5:
-                high_rarity_caught.append(fish_id)
+                high_rarity_caught.append(fish_entry)
             else:
-                low_rarity_caught.append(fish_id)
-        
-        final_stolen_fish_ids = []
+                low_rarity_caught.append(fish_entry)
+
+        final_stolen_fish = []
         if len(high_rarity_caught) <= 1:
-            final_stolen_fish_ids = initial_catch
+            final_stolen_fish = initial_catch
         else:
             random.shuffle(high_rarity_caught)
-            final_stolen_fish_ids.append(high_rarity_caught.pop(0))
-            final_stolen_fish_ids.extend(low_rarity_caught)
-            
+            final_stolen_fish.append(high_rarity_caught.pop(0))
+            final_stolen_fish.extend(low_rarity_caught)
+
             num_to_replace = len(high_rarity_caught)
 
             from collections import Counter
@@ -910,56 +927,69 @@ class GameMechanicsService:
             pond_counts.subtract(initial_catch_counts)
 
             replacement_pool = []
-            for fish_id, count in pond_counts.items():
+            for fish_entry, count in pond_counts.items():
                 if count > 0:
-                    template = fish_templates.get(fish_id)
+                    template = fish_templates.get(fish_entry[0])
                     if template and template.rarity < 5:
-                        replacement_pool.extend([fish_id] * count)
-            
+                        replacement_pool.extend([fish_entry] * count)
+
             if replacement_pool:
                 num_can_replace = min(num_to_replace, len(replacement_pool))
                 replacements = random.sample(replacement_pool, num_can_replace)
-                final_stolen_fish_ids.extend(replacements)
+                final_stolen_fish.extend(replacements)
 
-        # 8. 统计最终偷到的鱼
+        # 8. 统计最终偷到的鱼（按 fish_id + quality_level 分组）
         stolen_fish_counts = {}
-        for fish_id in final_stolen_fish_ids:
-            stolen_fish_counts[fish_id] = stolen_fish_counts.get(fish_id, 0) + 1
-    
-        # 9. 执行电鱼事务并计算总价值
+        for fish_id, quality_level in final_stolen_fish:
+            key = (fish_id, quality_level)
+            stolen_fish_counts[key] = stolen_fish_counts.get(key, 0) + 1
+
+        # 9. 执行电鱼事务并计算总价值（保留原品质）
         stolen_summary = []
+        stolen_fish_details = []
         total_value_stolen = 0
-    
-        for fish_id, count in stolen_fish_counts.items():
-            self.inventory_repo.update_fish_quantity(victim_id, fish_id, delta=-count, quality_level=0)
-            self.inventory_repo.add_fish_to_inventory(thief_id, fish_id, quantity=count, quality_level=0)
-            
+
+        for (fish_id, quality_level), count in stolen_fish_counts.items():
+            self.inventory_repo.update_fish_quantity(victim_id, fish_id, delta=-count, quality_level=quality_level)
+            self.inventory_repo.add_fish_to_inventory(thief_id, fish_id, quantity=count, quality_level=quality_level)
+
             template = fish_templates.get(fish_id)
             if template:
-                stolen_summary.append(f"【{template.name}】x{count}")
-                total_value_stolen += template.base_value * count
-    
+                value = template.base_value * (1 + quality_level)
+                quality_text = "（✨高品质）" if quality_level == 1 else ""
+                stolen_summary.append(f"【{template.name}】x{count}{quality_text}")
+                total_value_stolen += value * count
+                stolen_fish_details.append({
+                    'name': template.name,
+                    'fish_id': template.fish_id,
+                    'rarity': template.rarity,
+                    'value': value * count,
+                    'quantity': count,
+                    'quality_level': quality_level
+                })
+
         # 10. 更新电鱼的CD时间并保存
         thief.last_electric_fish_time = now
         self.user_repo.update(thief)
-    
+
         # 11. 生成成功消息
         counter_message = ""
         if protection_buff:
             if penetration_buff:
-                counter_message = "⚡ 破灵符的力量穿透了海灵守护！\n"
+                counter_message = "破灵符的力量穿透了海灵守护！\n"
             elif shadow_cloak_buff:
                 counter_message = "🌑 暗影斗篷让你在阴影中行动！\n"
-    
+
         stolen_details = "、".join(stolen_summary)
-        actual_stolen_count = len(final_stolen_fish_ids)
-        
+        actual_stolen_count = len(final_stolen_fish)
+
         # 计算收益占比
         steal_percentage = (actual_stolen_count / total_fish_count) * 100
-        
+
         return {
             "success": True,
             "message": f"{counter_message}{success_type}！成功对【{victim.nickname}】的鱼塘进行了电击，捕获了{actual_stolen_count}条鱼（占其总数的{steal_percentage:.1f}%），总价值 {total_value_stolen} 金币！\n分别是：{stolen_details}。\n💡 本次成功率为 {final_success_rate*100:.1f}%",
+            "stolen_fish": stolen_fish_details,
         }
     # ============================================================
     # ===================== 新增功能：电鱼 结束 =====================

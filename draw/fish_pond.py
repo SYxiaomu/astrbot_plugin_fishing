@@ -199,7 +199,7 @@ async def _draw_fish_pond_impl(pond_data: Dict[str, Any], user_data: Dict[str, A
 
         fcode = f"F{fish_id}H" if quality_level == 1 else f"F{fish_id}"
 
-        name_line = f"{fish_name}{quality_display}"
+        name_line = f"{fish_name}"
         draw.text((x + 15, info_y), name_line, font=content_font, fill=text_primary)
 
         detail_y = info_y + 25
@@ -249,7 +249,7 @@ def _create_pond_fallback_image(pond_data: Dict[str, Any], user_data: Dict[str, 
     total_count = stats.get('total_count', 0)
     total_value = stats.get('total_value', 0)
 
-    draw.text((50, 30), "🐟 鱼塘", font=title_font, fill=primary_dark)
+    draw.text((50, 30), "鱼塘", font=title_font, fill=primary_dark)
     draw.text((50, 100), f"总鱼数: {total_count} 条", font=content_font, fill=primary_dark)
     draw.text((50, 130), f"总价值: {total_value} 金币", font=content_font, fill=primary_dark)
 

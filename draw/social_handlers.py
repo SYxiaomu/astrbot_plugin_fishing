@@ -42,7 +42,23 @@ async def draw_steal_result_image(steal_data: Dict[str, Any]) -> Image.Image:
 async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
     """偷鱼结果图片生成的实际实现"""
     width = 600
-    height = 450
+
+    # 计算动态高度
+    base_height = 350  # 增加基础高度以容纳更多信息
+    message = steal_data.get('message', '')
+    stolen_fish = steal_data.get('stolen_fish', [])
+
+    # 估算消息占用的高度
+    message_lines = len(message.split('\n')) if message else 0
+    message_height = min(message_lines, 6) * 25 + 30 if message and not stolen_fish else 0
+
+    # 估算鱼列表占用的高度 - 每个鱼需要更多空间显示详细信息
+    fish_count = len(stolen_fish)
+    fish_height = 30 + min(fish_count, 5) * 80 + (30 if fish_count > 5 else 0) if stolen_fish else 0
+
+    height = base_height + message_height + fish_height + 50  # 50是底部边距
+    height = max(height, 450)  # 最小高度
+    height = min(height, 900)  # 最大高度限制
 
     from .gradient_utils import create_vertical_gradient
 
@@ -112,8 +128,80 @@ async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
 
     current_y += card_height + 25
 
+    # 显示偷到的鱼列表 - 采用与钓鱼结果一致的卡片式布局
+    stolen_fish = steal_data.get('stolen_fish', [])
+    if stolen_fish:
+        fish_count = len(stolen_fish)
+
+        for i, fish in enumerate(stolen_fish[:6]):
+            fish_name = fish.get('name', '未知鱼')
+            quantity = fish.get('quantity', 1)
+            value = fish.get('value', 0)
+            rarity = fish.get('rarity', 1)
+            quality_level = fish.get('quality_level', 0)
+            fish_id = fish.get('fish_id', 0)
+
+            # 鱼卡片高度
+            fish_card_height = 80
+
+            draw_rounded_rectangle(draw,
+                                 (30, current_y, width - 30, current_y + fish_card_height),
+                                 10, fill=card_bg)
+
+            # 稀有度显示 - 靠左，添加"稀有度:"前缀
+            rarity_text = format_rarity_display(rarity)
+
+            if rarity >= 7:
+                rarity_color = COLOR_REFINE_RED
+            elif rarity >= 5:
+                rarity_color = COLOR_REFINE_ORANGE
+            elif rarity >= 3:
+                rarity_color = COLOR_RARE
+            else:
+                rarity_color = text_secondary
+
+            rarity_label = f"稀有度: {rarity_text}"
+            draw.text((50, current_y + 12), rarity_label, font=small_font, fill=rarity_color)
+
+            # 鱼名和品质
+            info_y = current_y + 38
+            quality_display = "✨" if quality_level == 1 else ""
+
+            fcode = f"F{fish_id}H" if quality_level == 1 else f"F{fish_id}"
+
+            name_line = f"{fish_name}{quality_display}"
+            draw.text((50, info_y), name_line, font=content_font, fill=text_primary)
+
+            # 详细信息行
+            detail_y = info_y + 25
+
+            quality_text = "高品质" if quality_level == 1 else "普通"
+
+            details = [
+                f"数量: {quantity}",
+                f"ID: {fcode}",
+                f"品质: {quality_text}",
+                f"价值: {value} 金币"
+            ]
+
+            detail_text = " | ".join(details)
+            draw.text((50, detail_y), detail_text, font=tiny_font, fill=text_secondary)
+
+            current_y += fish_card_height + 15
+
+            if i >= 5:
+                remaining = fish_count - 6
+                if remaining > 0:
+                    more_text = f"... 还有 {remaining} 种鱼未显示"
+                    more_w, _ = get_text_size(more_text, tiny_font)
+                    more_x = (width - more_w) // 2
+                    draw.text((more_x, current_y), more_text, font=tiny_font, fill=text_secondary)
+                    current_y += 25
+                break
+
+    # 如果没有鱼列表但有消息，显示消息
     message = steal_data.get('message', '')
-    if message:
+    if message and not stolen_fish:
         card_width = width - 60
         lines = []
         for line in message.split('\n'):
@@ -135,47 +223,6 @@ async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
             draw.text((50, text_y + i * 25), line, font=content_font, fill=text_primary)
 
         current_y += message_height + 20
-
-    stolen_fish = steal_data.get('stolen_fish', [])
-    if stolen_fish:
-        fish_count = len(stolen_fish)
-        fish_text = f"🐟 偷到了 {fish_count} 条鱼"
-        fish_w, _ = get_text_size(fish_text, small_font)
-        fish_x = (width - fish_w) // 2
-        draw.text((fish_x, current_y), fish_text, font=small_font, fill=gold_color)
-        current_y += 25
-
-        for i, fish in enumerate(stolen_fish[:5]):
-            fish_name = fish.get('name', '未知鱼')
-            rarity = fish.get('rarity', 1)
-            value = fish.get('value', 0)
-
-            rarity_text = format_rarity_display(rarity)
-            fish_info = f"{rarity_text} {fish_name} ({value}金币)"
-
-            if rarity >= 7:
-                rarity_color = COLOR_REFINE_RED
-            elif rarity >= 5:
-                rarity_color = COLOR_REFINE_ORANGE
-            elif rarity >= 3:
-                rarity_color = COLOR_RARE
-            else:
-                rarity_color = text_secondary
-
-            info_w, _ = get_text_size(fish_info, tiny_font)
-            info_x = (width - info_w) // 2
-            draw.text((info_x, current_y), fish_info, font=tiny_font, fill=rarity_color)
-            current_y += 20
-
-            if i >= 4:
-                remaining = fish_count - 5
-                if remaining > 0:
-                    more_text = f"... 还有 {remaining} 条鱼"
-                    more_w, _ = get_text_size(more_text, tiny_font)
-                    more_x = (width - more_w) // 2
-                    draw.text((more_x, current_y), more_text, font=tiny_font, fill=text_secondary)
-                    current_y += 20
-                break
 
     footer_text = f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     footer_w, footer_h = get_text_size(footer_text, tiny_font)

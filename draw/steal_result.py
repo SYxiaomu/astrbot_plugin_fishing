@@ -1,35 +1,24 @@
 import os
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 from PIL import Image, ImageDraw
 from .styles import (
     IMG_WIDTH, PADDING, CORNER_RADIUS,
     COLOR_TEXT_DARK, COLOR_CARD_BG,
     COLOR_GOLD, COLOR_RARE, COLOR_REFINE_RED, COLOR_REFINE_ORANGE,
-    COLOR_CORNER, COLOR_SUCCESS, COLOR_ERROR, load_font
+    COLOR_CORNER, COLOR_SUCCESS, COLOR_ERROR, load_font_with_emoji_fallback
 )
 
+
 def format_rarity_display(rarity: int) -> str:
-    """格式化稀有度显示"""
     if rarity <= 10:
         return '★' * rarity
     else:
         return '★★★★★★★★★★+'
 
+
 async def draw_steal_result_image(steal_data: Dict[str, Any]) -> Image.Image:
-    """
-    绘制偷鱼结果图片
-
-    Args:
-        steal_data: 偷鱼结果数据，包括：
-            - success: 是否成功
-            - thief_name: 偷窃者昵称
-            - victim_name: 受害者昵称
-            - message: 结果消息
-            - stolen_fish: 偷到的鱼列表（可选）
-    """
     import asyncio
-
     try:
         return await asyncio.wait_for(
             _draw_steal_result_impl(steal_data),
@@ -40,38 +29,71 @@ async def draw_steal_result_image(steal_data: Dict[str, Any]) -> Image.Image:
 
 
 async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
-    """偷鱼结果图片生成的实际实现"""
-    width = 600
-
-    # 计算动态高度
-    base_height = 280  # 基础高度（标题 + 用户卡片 + 状态）
-    message = steal_data.get('message', '')
-    stolen_fish = steal_data.get('stolen_fish', [])
-
-    # 估算消息占用的高度
-    message_lines = len(message.split('\n')) if message else 0
-    message_height = min(message_lines, 6) * 25 + 30 if message and not stolen_fish else 0
-
-    # 估算鱼列表占用的高度
-    fish_count = len(stolen_fish)
-    fish_height = 25 + min(fish_count, 5) * 20 + (20 if fish_count > 5 else 0) if stolen_fish else 0
-
-    height = base_height + message_height + fish_height + 50  # 50是底部边距
-    height = max(height, 400)  # 最小高度
-    height = min(height, 800)  # 最大高度限制
-
     from .gradient_utils import create_vertical_gradient
+    from .text_utils import get_text_size_cached, wrap_text_by_width_optimized, create_text_cache
 
-    bg_top = (174, 214, 241)
-    bg_bot = (245, 251, 255)
-    image = create_vertical_gradient(width, height, bg_top, bg_bot)
+    width = 600
+    stolen_fish = steal_data.get('stolen_fish', [])
+    message = steal_data.get('message', '')
+    success = steal_data.get('success', False)
+
+    # ---- 预渲染：文本换行 ----
+    text_cache = create_text_cache()
+
+    def get_text_size(text, font):
+        return get_text_size_cached(text, font, text_cache)
+
+    content_font = load_font_with_emoji_fallback(20)
+    small_font = load_font_with_emoji_fallback(18)
+    tiny_font = load_font_with_emoji_fallback(16)
+
+    max_text_width = width - 100
+
+    message_lines: List[str] = []
+    if message:
+        # 按 \n 分割消息，每行作为独立的一行显示
+        for raw_line in message.split('\n'):
+            # 跳过包含"本次成功率"的行（如果有的话）
+            if '本次成功率' in raw_line:
+                continue
+            # 对每行进行宽度换行处理
+            wrapped = wrap_text_by_width_optimized(raw_line, content_font, max_text_width, text_cache)
+            message_lines.extend(wrapped if wrapped else [''])
+
+    # ---- 动态高度 ----
+    CARD_PAD = 30
+    TITLE_H = 60
+    USER_CARD_H = 80
+    FOOTER_H = 60
+    LINE_H = 28
+    FISH_CARD_H = 100
+    FISH_GAP = 15
+
+    y = CARD_PAD
+    y += TITLE_H
+    y += USER_CARD_H + 20
+
+    fish_display = min(len(stolen_fish), 8)
+    fish_section_h = fish_display * (FISH_CARD_H + FISH_GAP) if fish_display else 0
+    if fish_display and len(stolen_fish) > 8:
+        fish_section_h += 25
+    y += fish_section_h
+
+    msg_section_h = 0
+    if message_lines and not stolen_fish:
+        capped = message_lines[:8]
+        msg_section_h = len(capped) * LINE_H + 40
+        y += msg_section_h + 15
+
+    y += FOOTER_H + 10
+    height = max(y, 380)
+
+    # ---- 创建画布 ----
+    image = create_vertical_gradient(width, height, (174, 214, 241), (245, 251, 255))
     draw = ImageDraw.Draw(image)
 
-    title_font = load_font(32)
-    subtitle_font = load_font(24)
-    content_font = load_font(20)
-    small_font = load_font(18)
-    tiny_font = load_font(16)
+    title_font = load_font_with_emoji_fallback(32)
+    subtitle_font = load_font_with_emoji_fallback(24)
 
     primary_dark = (52, 73, 94)
     primary_medium = (74, 105, 134)
@@ -82,93 +104,42 @@ async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
     gold_color = (218, 165, 32)
     card_bg = (255, 255, 255, 240)
 
-    from .text_utils import get_text_size_cached, create_text_cache
-    text_cache = create_text_cache()
-
-    def get_text_size(text, font):
-        return get_text_size_cached(text, font, text_cache)
-
-    def draw_rounded_rectangle(draw, bbox, radius, fill=None, outline=None, width=1):
+    def draw_rounded_rect(bbox, radius, fill=None):
         x1, y1, x2, y2 = bbox
-        draw.rectangle([x1 + radius, y1, x2 - radius, y2], fill=fill, outline=outline, width=width)
-        draw.rectangle([x1, y1 + radius, x2, y2 - radius], fill=fill, outline=outline, width=width)
-        draw.ellipse([x1, y1, x1 + 2*radius, y1 + 2*radius], fill=fill, outline=outline, width=width)
-        draw.ellipse([x2 - 2*radius, y1, x2, y1 + 2*radius], fill=fill, outline=outline, width=width)
-        draw.ellipse([x1, y2 - 2*radius, x1 + 2*radius, y2], fill=fill, outline=outline, width=width)
-        draw.ellipse([x2 - 2*radius, y2 - 2*radius, x2, y2], fill=fill, outline=outline, width=width)
+        draw.rectangle([x1 + radius, y1, x2 - radius, y2], fill=fill)
+        draw.rectangle([x1, y1 + radius, x2, y2 - radius], fill=fill)
+        draw.ellipse([x1, y1, x1 + 2 * radius, y1 + 2 * radius], fill=fill)
+        draw.ellipse([x2 - 2 * radius, y1, x2, y1 + 2 * radius], fill=fill)
+        draw.ellipse([x1, y2 - 2 * radius, x1 + 2 * radius, y2], fill=fill)
+        draw.ellipse([x2 - 2 * radius, y2 - 2 * radius, x2, y2], fill=fill)
 
-    current_y = 20
-
+    # ---- 标题 ----
+    cur_y = CARD_PAD
     title_text = "🎭 偷鱼结果"
-    title_w, title_h = get_text_size(title_text, title_font)
-    title_x = (width - title_w) // 2
-    draw.text((title_x, current_y), title_text, font=title_font, fill=primary_dark)
-    current_y += title_h + 20
+    tw, th = get_text_size(title_text, title_font)
+    draw.text(((width - tw) // 2, cur_y), title_text, font=title_font, fill=primary_dark)
+    cur_y += TITLE_H
 
-    user_card_margin = 30
-    card_height = 80
-    draw_rounded_rectangle(draw,
-                         (user_card_margin, current_y, width - user_card_margin, current_y + card_height),
-                         10, fill=card_bg)
-
-    col1_x = user_card_margin + 20
-    row1_y = current_y + 12
-    row2_y = current_y + 45
+    # ---- 用户卡片 ----
+    draw_rounded_rect((CARD_PAD, cur_y, width - CARD_PAD, cur_y + USER_CARD_H), 10, card_bg)
+    cx = CARD_PAD + 20
 
     thief_name = steal_data.get('thief_name', '未知用户')
     victim_name = steal_data.get('victim_name', '未知用户')
+    draw.text((cx, cur_y + 14), f"{thief_name}  →  {victim_name}", font=subtitle_font, fill=primary_medium)
 
-    action_text = f"{thief_name} → {victim_name}"
-    draw.text((col1_x, row1_y), action_text, font=subtitle_font, fill=primary_medium)
-
-    success = steal_data.get('success', False)
-    status_text = "✅ 偷鱼成功" if success else "❌ 偷鱼失败"
+    status_text = "偷鱼成功" if success else "偷鱼失败"
     status_color = success_color if success else error_color
-    draw.text((col1_x, row2_y), status_text, font=small_font, fill=status_color)
+    draw.text((cx, cur_y + 46), status_text, font=small_font, fill=status_color)
+    cur_y += USER_CARD_H + 20
 
-    current_y += card_height + 25
-
-    message = steal_data.get('message', '')
-    if message:
-        card_width = width - 60
-        lines = []
-        for line in message.split('\n'):
-            if len(line) > 40:
-                lines.append(line[:40])
-                lines.append(line[40:])
-            else:
-                lines.append(line)
-
-        max_lines = min(len(lines), 6)
-        message_height = max_lines * 25 + 30
-
-        draw_rounded_rectangle(draw,
-                             (30, current_y, width - 30, current_y + message_height),
-                             10, fill=card_bg)
-
-        text_y = current_y + 15
-        for i, line in enumerate(lines[:max_lines]):
-            draw.text((50, text_y + i * 25), line, font=content_font, fill=text_primary)
-
-        current_y += message_height + 20
-
-    stolen_fish = steal_data.get('stolen_fish', [])
+    # ---- 鱼卡片列表 ----
     if stolen_fish:
-        fish_count = len(stolen_fish)
-        fish_text = f"🐟 偷到了 {fish_count} 条鱼"
-        fish_w, _ = get_text_size(fish_text, small_font)
-        fish_x = (width - fish_w) // 2
-        draw.text((fish_x, current_y), fish_text, font=small_font, fill=gold_color)
-        current_y += 25
+        for i, fish in enumerate(stolen_fish[:8]):
+            fy = cur_y
+            draw_rounded_rect((CARD_PAD, fy, width - CARD_PAD, fy + FISH_CARD_H), 10, card_bg)
 
-        for i, fish in enumerate(stolen_fish[:5]):
-            fish_name = fish.get('name', '未知鱼')
             rarity = fish.get('rarity', 1)
-            value = fish.get('value', 0)
-
-            rarity_text = format_rarity_display(rarity)
-            fish_info = f"{rarity_text} {fish_name} - 价值: {value}金币"
-
             if rarity >= 7:
                 rarity_color = COLOR_REFINE_RED
             elif rarity >= 5:
@@ -178,54 +149,74 @@ async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
             else:
                 rarity_color = text_secondary
 
-            info_w, _ = get_text_size(fish_info, tiny_font)
-            info_x = (width - info_w) // 2
-            draw.text((info_x, current_y), fish_info, font=tiny_font, fill=rarity_color)
-            current_y += 20
+            rarity_label = f"稀有度: {format_rarity_display(rarity)}"
+            draw.text((cx, fy + 12), rarity_label, font=small_font, fill=rarity_color)
 
-            if i >= 4:
-                remaining = fish_count - 5
-                if remaining > 0:
-                    more_text = f"... 还有 {remaining} 条鱼"
-                    more_w, _ = get_text_size(more_text, tiny_font)
-                    more_x = (width - more_w) // 2
-                    draw.text((more_x, current_y), more_text, font=tiny_font, fill=text_secondary)
-                    current_y += 20
-                break
+            info_y = fy + 40
 
+            fish_name = fish.get('name', '未知鱼')[:15]
+            quality_level = fish.get('quality_level', 0)
+            draw.text((cx, info_y), f"{fish_name}", font=content_font, fill=text_primary)
+
+            detail_y = info_y + 25
+
+            quantity = fish.get('quantity', 1)
+            fish_id = fish.get('fish_id', 0)
+            value = fish.get('value', 0)
+            fcode = f"F{fish_id}H" if quality_level == 1 else f"F{fish_id}"
+            quality_text = "高品质" if quality_level == 1 else "普通"
+            details = [
+                f"数量: {quantity}",
+                f"ID: {fcode}",
+                f"品质: {quality_text}",
+                f"价值: {value} 金币"
+            ]
+            detail_text = " | ".join(details)
+            draw.text((cx, detail_y), detail_text, font=tiny_font, fill=text_secondary)
+
+            cur_y += FISH_CARD_H + FISH_GAP
+
+        if len(stolen_fish) > 8:
+            remaining = len(stolen_fish) - 8
+            more_text = f"… 还有 {remaining} 种鱼未显示"
+            mw, _ = get_text_size(more_text, tiny_font)
+            draw.text(((width - mw) // 2, cur_y), more_text, font=tiny_font, fill=text_secondary)
+            cur_y += 25
+
+    # ---- 消息卡片（失败时） ----
+    if message_lines and not stolen_fish:
+        capped = message_lines[:8]
+        msg_card_h = len(capped) * LINE_H + 40
+        draw_rounded_rect((CARD_PAD, cur_y, width - CARD_PAD, cur_y + msg_card_h), 10, card_bg)
+
+        ty = cur_y + 20
+        for line in capped:
+            draw.text((cx, ty), line, font=content_font, fill=text_primary)
+            ty += LINE_H
+        cur_y += msg_card_h + 15
+
+    # ---- 页脚 ----
     footer_text = f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    footer_w, footer_h = get_text_size(footer_text, tiny_font)
-    footer_x = (width - footer_w) // 2
-    draw.text((footer_x, current_y), footer_text, font=tiny_font, fill=text_secondary)
+    fw, fh = get_text_size(footer_text, tiny_font)
+    draw.text(((width - fw) // 2, cur_y), footer_text, font=tiny_font, fill=text_secondary)
 
-    corner_size = 15
-    corner_color = COLOR_CORNER
-    draw.ellipse([8, 8, 8 + corner_size, 8 + corner_size], fill=corner_color)
-    draw.ellipse([width - 8 - corner_size, 8, width - 8, 8 + corner_size], fill=corner_color)
-    draw.ellipse([8, height - 8 - corner_size, 8 + corner_size, height - 8], fill=corner_color)
-    draw.ellipse([width - 8 - corner_size, height - 8 - corner_size, width - 8, height - 8], fill=corner_color)
+    # ---- 四角装饰 ----
+    cs = 15
+    cc = COLOR_CORNER
+    for (px, py) in [(8, 8), (width - 23, 8), (8, height - 23), (width - 23, height - 23)]:
+        draw.ellipse([px, py, px + cs, py + cs], fill=cc)
 
     return image
 
 
 def _create_steal_fallback_image(steal_data: Dict[str, Any]) -> Image.Image:
-    """创建简化的回退图像"""
     width, height = 600, 350
     image = Image.new('RGB', (width, height), (255, 255, 255))
     draw = ImageDraw.Draw(image)
-
     title_font = load_font(28)
     content_font = load_font(18)
-
     primary_dark = (52, 73, 94)
-
     draw.text((50, 30), "🎭 偷鱼结果", font=title_font, fill=primary_dark)
-
-    thief_name = steal_data.get('thief_name', '未知用户')
-    victim_name = steal_data.get('victim_name', '未知用户')
-    message = steal_data.get('message', '')
-
-    draw.text((50, 100), f"{thief_name} → {victim_name}", font=content_font, fill=primary_dark)
-    draw.text((50, 140), message[:100], font=content_font, fill=primary_dark)
-
+    draw.text((50, 100), f"{steal_data.get('thief_name', '?')} → {steal_data.get('victim_name', '?')}", font=content_font, fill=primary_dark)
+    draw.text((50, 140), steal_data.get('message', '')[:100], font=content_font, fill=primary_dark)
     return image
