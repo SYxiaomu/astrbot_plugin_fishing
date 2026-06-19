@@ -13,7 +13,7 @@
 
 ## 🖼️ 部分图片输出示例
 个人背景图可以自定义修改
-![image](https://github.com/user-attachments/assets/f4fdde65-308d-4b2c-8f26-6ad374815ba1)
+![image](https://github.com/user-attachments/assets/f4fdde65-308d-4b2c-8f26-6ad374815ba1 =500x500)
 
 ## 🚀 最新更新 🚀
 
