@@ -458,7 +458,7 @@ async def force_settle_sicbo(plugin: "FishingPlugin", event: AstrMessageEvent):
         
         # 生成结果图片（复用通用函数）
         from ..draw.wheel_of_fate import draw_wheel_of_fate_result, save_image_to_temp
-        image = draw_wheel_of_fate_result(result["message"], admin_name)
+        image = await draw_wheel_of_fate_result(result["message"], admin_name, user_id, plugin.data_dir)
         image_path = save_image_to_temp(image, "sicbo_force_settle", plugin.data_dir)
         yield event.image_result(image_path)
     except Exception as e:
@@ -477,7 +477,7 @@ async def set_sicbo_countdown(plugin: "FishingPlugin", event: AstrMessageEvent):
         user_id = plugin._get_effective_user_id(event)
         user = plugin.user_repo.get_by_id(user_id)
         admin_name = user.nickname if user else "管理员"
-        image = draw_wheel_of_fate_result(message, admin_name)
+        image = await draw_wheel_of_fate_result(message, admin_name, user_id, plugin.data_dir)
         image_path = save_image_to_temp(image, "sicbo_countdown_help", plugin.data_dir)
         yield event.image_result(image_path)
         return
@@ -499,7 +499,7 @@ async def set_sicbo_countdown(plugin: "FishingPlugin", event: AstrMessageEvent):
         else:
             # 失败时使用通用图片函数
             from ..draw.wheel_of_fate import draw_wheel_of_fate_result, save_image_to_temp
-            image = draw_wheel_of_fate_result(result["message"], admin_name)
+            image = await draw_wheel_of_fate_result(result["message"], admin_name, user_id, plugin.data_dir)
             image_path = save_image_to_temp(image, "sicbo_countdown_fail", plugin.data_dir)
             yield event.image_result(image_path)
     except ValueError:
@@ -521,7 +521,7 @@ async def set_sicbo_mode(plugin: "FishingPlugin", event: AstrMessageEvent):
         user_id = plugin._get_effective_user_id(event)
         user = plugin.user_repo.get_by_id(user_id)
         admin_name = user.nickname if user else "管理员"
-        image = draw_wheel_of_fate_result(message, admin_name)
+        image = await draw_wheel_of_fate_result(message, admin_name, user_id, plugin.data_dir)
         image_path = save_image_to_temp(image, "sicbo_mode_help", plugin.data_dir)
         yield event.image_result(image_path)
         return
@@ -545,13 +545,13 @@ async def set_sicbo_mode(plugin: "FishingPlugin", event: AstrMessageEvent):
             
             # 生成设置成功图片
             from ..draw.wheel_of_fate import draw_wheel_of_fate_result, save_image_to_temp
-            image = draw_wheel_of_fate_result(result["message"], admin_name)
+            image = await draw_wheel_of_fate_result(result["message"], admin_name, user_id, plugin.data_dir)
             image_path = save_image_to_temp(image, "sicbo_mode_set", plugin.data_dir)
             yield event.image_result(image_path)
         else:
             # 失败时使用通用图片函数
             from ..draw.wheel_of_fate import draw_wheel_of_fate_result, save_image_to_temp
-            image = draw_wheel_of_fate_result(result["message"], admin_name)
+            image = await draw_wheel_of_fate_result(result["message"], admin_name, user_id, plugin.data_dir)
             image_path = save_image_to_temp(image, "sicbo_mode_fail", plugin.data_dir)
             yield event.image_result(image_path)
     except Exception as e:

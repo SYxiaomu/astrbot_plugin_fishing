@@ -90,7 +90,7 @@ async def ranking(plugin: "FishingPlugin", event: AstrMessageEvent):
     safe_unique_id = sanitize_filename(str(unique_id))
     output_path = os.path.join(plugin.tmp_dir, f"fishing_ranking_{safe_unique_id}.png")
 
-    draw_fishing_ranking(user_data, output_path=output_path, ranking_type=ranking_type)
+    await draw_fishing_ranking(user_data, output_path=output_path, ranking_type=ranking_type, data_dir=plugin.data_dir)
     yield event.image_result(output_path)
 
 
@@ -132,6 +132,7 @@ async def steal_fish(plugin: "FishingPlugin", event: AstrMessageEvent):
             # 准备数据
             steal_data = {
                 'success': result.get('success', False),
+                'thief_id': user_id,
                 'thief_name': thief.nickname if thief else user_id,
                 'victim_name': victim.nickname if victim else target_id,
                 'message': result.get('message', ''),
@@ -139,7 +140,7 @@ async def steal_fish(plugin: "FishingPlugin", event: AstrMessageEvent):
             }
 
             # 生成图片
-            image = await draw_steal_result_image(steal_data)
+            image = await draw_steal_result_image(steal_data, data_dir=plugin.data_dir)
             image_path = os.path.join(plugin.tmp_dir, f"steal_result_{user_id}_{target_id}.png")
             image.save(image_path)
             yield event.image_result(image_path)
@@ -305,17 +306,52 @@ async def dispel_protection(plugin: "FishingPlugin", event: AstrMessageEvent):
 
 
 async def view_titles(plugin: "FishingPlugin", event: AstrMessageEvent):
-    """查看用户称号"""
+    """查看用户称号（图片版）"""
+    from ..draw.titles import draw_titles, draw_no_titles_message, save_image_to_temp as save_title_image
+
     user_id = plugin._get_effective_user_id(event)
+    user = plugin.user_repo.get_by_id(user_id)
+    if not user:
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
+
+    nickname = user.nickname if user.nickname else user_id
     titles = plugin.user_service.get_user_titles(user_id).get("titles", [])
+
     if titles:
-        message = "【🏅 您的称号】\n"
-        for title in titles:
-            status = " (当前装备)" if title["is_current"] else ""
-            message += f"- {title['name']} (ID: {title['title_id']}){status}\n- 描述: {title['description']}\n\n"
-        yield event.plain_result(message)
+        try:
+            image = await draw_titles(
+                titles,
+                user_id=user_id,
+                nickname=nickname,
+                data_dir=plugin.data_dir,
+                current_title_id=user.current_title_id
+            )
+            image_path = save_title_image(image, "titles", plugin.data_dir)
+            yield event.image_result(image_path)
+        except Exception as e:
+            from astrbot.api import logger
+            logger.error(f"生成称号图片时发生错误: {e}", exc_info=True)
+            # 回退到文本输出
+            message = "【🏅 您的称号】\n"
+            for title in titles:
+                status = " (当前装备)" if title["is_current"] else ""
+                message += f"- {title['name']} (ID: {title['title_id']}){status}\n- 描述: {title['description']}\n\n"
+            yield event.plain_result(message)
     else:
-        yield event.plain_result("❌ 您还没有任何称号，快去完成成就或参与活动获取吧！")
+        try:
+            image = await draw_no_titles_message(
+                "❌ 您还没有任何称号，快去完成成就或参与活动获取吧！",
+                user_id=user_id,
+                nickname=nickname,
+                data_dir=plugin.data_dir
+            )
+            image_path = save_title_image(image, "no_titles", plugin.data_dir)
+            yield event.image_result(image_path)
+        except Exception as e:
+            from astrbot.api import logger
+            logger.error(f"生成称号提示图片时发生错误: {e}", exc_info=True)
+            yield event.plain_result("❌ 您还没有任何称号，快去完成成就或参与活动获取吧！")
 
 
 async def use_title(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -334,28 +370,62 @@ async def use_title(plugin: "FishingPlugin", event: AstrMessageEvent):
 
 
 async def view_achievements(plugin: "FishingPlugin", event: AstrMessageEvent):
-    """查看用户成就"""
+    """查看用户成就（图片版）"""
     from ..utils import safe_datetime_handler
+    from ..draw.achievements import draw_achievements, draw_no_achievements_message, save_image_to_temp as save_ach_image
 
     user_id = plugin._get_effective_user_id(event)
+    user = plugin.user_repo.get_by_id(user_id)
+    if not user:
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
+
+    nickname = user.nickname if user.nickname else user_id
+
     achievements = plugin.achievement_service.get_user_achievements(user_id).get(
         "achievements", []
     )
     if achievements:
-        message = "【🏆 您的成就】\n"
-        for ach in achievements:
-            message += f"- {ach['name']} (ID: {ach['id']})\n"
-            message += f"  描述: {ach['description']}\n"
-            if ach.get("completed_at"):
-                message += f"  完成时间: {safe_datetime_handler(ach['completed_at'])}\n"
-            else:
-                message += "  进度: {}/{}\n".format(
-                    ach.get("progress", 0), ach.get("target", 1)
-                )
-        message += "请继续努力完成更多成就！"
-        yield event.plain_result(message)
+        try:
+            image = await draw_achievements(
+                achievements,
+                user_id=user_id,
+                nickname=nickname,
+                data_dir=plugin.data_dir,
+                safe_datetime_handler=safe_datetime_handler
+            )
+            image_path = save_ach_image(image, "achievements", plugin.data_dir)
+            yield event.image_result(image_path)
+        except Exception as e:
+            from astrbot.api import logger
+            logger.error(f"生成成就图片时发生错误: {e}", exc_info=True)
+            # 回退到文本输出
+            message = "【🏆 您的成就】\n"
+            for ach in achievements:
+                message += f"- {ach['name']} (ID: {ach['id']})\n"
+                message += f"  描述: {ach['description']}\n"
+                if ach.get("completed_at"):
+                    message += f"  完成时间: {safe_datetime_handler(ach['completed_at'])}\n"
+                else:
+                    message += "  进度: {}/{}\n".format(
+                        ach.get("progress", 0), ach.get("target", 1)
+                    )
+            message += "请继续努力完成更多成就！"
+            yield event.plain_result(message)
     else:
-        yield event.plain_result("❌ 您还没有任何成就，快去完成任务或参与活动获取吧！")
+        try:
+            image = await draw_no_achievements_message(
+                "❌ 您还没有任何成就，快去完成任务或参与活动获取吧！",
+                user_id=user_id,
+                nickname=nickname,
+                data_dir=plugin.data_dir
+            )
+            image_path = save_ach_image(image, "no_achievements", plugin.data_dir)
+            yield event.image_result(image_path)
+        except Exception as e:
+            from astrbot.api import logger
+            logger.error(f"生成成就提示图片时发生错误: {e}", exc_info=True)
+            yield event.plain_result("❌ 您还没有任何成就，快去完成任务或参与活动获取吧！")
 
 
 async def tax_record(plugin: "FishingPlugin", event: AstrMessageEvent):

@@ -6,7 +6,14 @@
 
 ## ⚠️ 通知
 插件原作者暂停更新，克隆了个小仓库自己缝缝补补喵
-目前正在完善转图片发送
+目前大部分文本输出已经改为图片（应该可以降低封号风险吧）
+下一步打算搞个用户的网页端，支持直接在网页端操作（上班摸鱼）
+本人部分AI率100%
+![image](https://github.com/user-attachments/assets/1b1dea1e-8b68-408f-9a3f-c001ff95db0a)
+
+## 🖼️ 部分图片输出示例
+个人背景图可以自定义修改
+![image](https://github.com/user-attachments/assets/f4fdde65-308d-4b2c-8f26-6ad374815ba1)
 
 ## 🚀 最新更新 🚀
 

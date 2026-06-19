@@ -8,6 +8,8 @@ from .styles import (
     COLOR_GOLD, COLOR_RARE, COLOR_REFINE_RED, COLOR_REFINE_ORANGE,
     COLOR_CORNER, load_font
 )
+from .star_renderer import draw_text_with_stars
+from .utils import draw_user_card_bg
 
 def format_rarity_display(rarity: int) -> str:
     """格式化稀有度显示"""
@@ -34,7 +36,7 @@ def calculate_dynamic_height(fishes: List[Dict[str, Any]]) -> int:
     fish_section_height = fish_count * card_height + max(fish_count - 1, 0) * card_margin
     return base_height + fish_section_height + 50
 
-async def draw_fish_pond_image(pond_data: Dict[str, Any], user_data: Dict[str, Any]) -> Image.Image:
+async def draw_fish_pond_image(pond_data: Dict[str, Any], user_data: Dict[str, Any], data_dir: str = None) -> Image.Image:
     """
     绘制鱼塘图片
 
@@ -58,14 +60,14 @@ async def draw_fish_pond_image(pond_data: Dict[str, Any], user_data: Dict[str, A
 
     try:
         return await asyncio.wait_for(
-            _draw_fish_pond_impl(pond_data, user_data),
+            _draw_fish_pond_impl(pond_data, user_data, data_dir),
             timeout=timeout
         )
     except asyncio.TimeoutError:
         return _create_pond_fallback_image(pond_data, user_data)
 
 
-async def _draw_fish_pond_impl(pond_data: Dict[str, Any], user_data: Dict[str, Any]) -> Image.Image:
+async def _draw_fish_pond_impl(pond_data: Dict[str, Any], user_data: Dict[str, Any], data_dir: str = None) -> Image.Image:
     """鱼塘图片生成的实际实现"""
     fishes = pond_data.get('fishes', [])
     stats = pond_data.get('stats', {})
@@ -117,14 +119,14 @@ async def _draw_fish_pond_impl(pond_data: Dict[str, Any], user_data: Dict[str, A
     current_y += title_h + 15
 
     user_card_margin = 30
-    card_height = 80
-    draw_rounded_rectangle(draw,
-                         (user_card_margin, current_y, width - user_card_margin, current_y + card_height),
-                         10, fill=card_bg)
+    card_height = 120
+    await draw_user_card_bg(image, draw, user_data.get('user_id', ''), data_dir,
+                            (user_card_margin, current_y, width - user_card_margin, current_y + card_height),
+                            10, fallback_fill=card_bg)
 
     col1_x = user_card_margin + 20
-    row1_y = current_y + 12
-    row2_y = current_y + 48
+    row1_y = current_y + 18
+    row2_y = current_y + 72
 
     nickname = user_data.get('nickname', '未知用户')
     draw.text((col1_x, row1_y), nickname, font=subtitle_font, fill=primary_medium)
@@ -184,9 +186,10 @@ async def _draw_fish_pond_impl(pond_data: Dict[str, Any], user_data: Dict[str, A
         else:
             rarity_color = text_secondary
 
-        # 稀有度靠左显示，添加"稀有度: "前缀
+        # 稀有度靠左显示，添加"稀有度: "前缀（使用图片渲染★）
         rarity_label = f"稀有度: {rarity_text}"
-        draw.text((x + 15, y + 12), rarity_label, font=small_font, fill=rarity_color)
+        draw_text_with_stars(image, draw, (x + 15, y + 12), rarity_label, 
+                             font=small_font, fill=rarity_color, star_size=16)
 
         info_y = y + 40
 
@@ -199,7 +202,7 @@ async def _draw_fish_pond_impl(pond_data: Dict[str, Any], user_data: Dict[str, A
 
         fcode = f"F{fish_id}H" if quality_level == 1 else f"F{fish_id}"
 
-        name_line = f"{fish_name}"
+        name_line = f"{fish_name}{quality_display}"
         draw.text((x + 15, info_y), name_line, font=content_font, fill=text_primary)
 
         detail_y = info_y + 25

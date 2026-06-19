@@ -10,6 +10,8 @@ from .styles import (
     COLOR_GOLD, COLOR_RARE, COLOR_REFINE_RED, COLOR_REFINE_ORANGE,
     COLOR_CORNER, load_font
 )
+from .star_renderer import draw_text_with_stars
+from .utils import draw_user_card_bg
 
 def format_rarity_display(rarity: int) -> str:
     """格式化稀有度显示"""
@@ -27,7 +29,7 @@ def to_percentage(value: float) -> str:
     else:
         return f"+{(value - 1) * 100:.1f}%"
 
-async def draw_fishing_result_image(fish_data: Dict[str, Any], user_data: Dict[str, Any]) -> Image.Image:
+async def draw_fishing_result_image(fish_data: Dict[str, Any], user_data: Dict[str, Any], data_dir: str = None) -> Image.Image:
     """
     绘制钓鱼结果图片
 
@@ -50,14 +52,14 @@ async def draw_fishing_result_image(fish_data: Dict[str, Any], user_data: Dict[s
 
     try:
         return await asyncio.wait_for(
-            _draw_fishing_result_impl(fish_data, user_data),
+            _draw_fishing_result_impl(fish_data, user_data, data_dir),
             timeout=10.0
         )
     except asyncio.TimeoutError:
         return _create_fishing_fallback_image(fish_data, user_data)
 
 
-async def _draw_fishing_result_impl(fish_data: Dict[str, Any], user_data: Dict[str, Any]) -> Image.Image:
+async def _draw_fishing_result_impl(fish_data: Dict[str, Any], user_data: Dict[str, Any], data_dir: str = None) -> Image.Image:
     """钓鱼结果图片生成的实际实现"""
     width = 600
     height = 500
@@ -106,14 +108,14 @@ async def _draw_fishing_result_impl(fish_data: Dict[str, Any], user_data: Dict[s
     current_y += title_h + 20
 
     user_card_margin = 30
-    card_height = 70
-    draw_rounded_rectangle(draw,
-                         (user_card_margin, current_y, width - user_card_margin, current_y + card_height),
-                         10, fill=card_bg)
+    card_height = 105
+    await draw_user_card_bg(image, draw, user_data.get('user_id', ''), data_dir,
+                            (user_card_margin, current_y, width - user_card_margin, current_y + card_height),
+                            10, fallback_fill=card_bg)
 
     col1_x = user_card_margin + 20
-    row1_y = current_y + 12
-    row2_y = current_y + 42
+    row1_y = current_y + 18
+    row2_y = current_y + 63
 
     nickname = user_data.get('nickname', '未知用户')
     draw.text((col1_x, row1_y), nickname, font=subtitle_font, fill=primary_medium)
@@ -151,9 +153,10 @@ async def _draw_fishing_result_impl(fish_data: Dict[str, Any], user_data: Dict[s
     else:
         rarity_color = text_secondary
 
-    # 稀有度靠左显示，添加"稀有度: "前缀
+    # 稀有度靠左显示，添加"稀有度: "前缀（使用图片渲染★）
     rarity_label = f"稀有度: {rarity_text}"
-    draw.text((50, current_y + 15), rarity_label, font=small_font, fill=rarity_color)
+    draw_text_with_stars(image, draw, (50, current_y + 15), rarity_label, 
+                         font=small_font, fill=rarity_color, star_size=16)
 
     info_y = current_y + 45
 
@@ -223,7 +226,10 @@ def _create_fishing_fallback_image(fish_data: Dict[str, Any], user_data: Dict[st
     value = fish_data.get('value', 0)
 
     draw.text((50, 100), f"鱼名: {fish_name}", font=content_font, fill=primary_dark)
-    draw.text((50, 130), f"稀有度: {'★' * rarity}", font=content_font, fill=primary_dark)
+    # 使用图片渲染★
+    rarity_short = '★' * rarity
+    draw_text_with_stars(image, draw, (50, 130), f"稀有度: {rarity_short}", 
+                         font=content_font, fill=primary_dark, star_size=20)
     draw.text((50, 160), f"价值: {value} 金币", font=content_font, fill=primary_dark)
 
     return image

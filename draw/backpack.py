@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from .utils import get_user_avatar
+from .utils import get_user_avatar, draw_user_card_bg
 from .styles import (
     IMG_WIDTH, PADDING, CORNER_RADIUS,
     COLOR_BACKGROUND, COLOR_HEADER_BG, COLOR_TEXT_WHITE, COLOR_TEXT_DARK,
@@ -11,6 +11,7 @@ from .styles import (
     COLOR_GOLD, COLOR_RARE, COLOR_REFINE_RED, COLOR_REFINE_ORANGE,
     COLOR_CORNER, load_font
 )
+from .star_renderer import draw_text_with_stars
 
 def format_rarity_display(rarity: int) -> str:
     """格式化稀有度显示，支持显示到10星，10星以上显示为★★★★★★★★★★+"""
@@ -295,15 +296,15 @@ async def _draw_backpack_image_impl(user_data: Dict[str, Any], data_dir: str) ->
 
     # 用户信息卡片
     current_y = title_y + title_h + 15
-    card_height = 80
+    card_height = 120
     card_margin = 15
     # 保持与装备卡片一致的边距（30px左右边距，与装备区域对齐）
     user_card_margin = 30
     
     # 用户信息卡片
-    draw_rounded_rectangle(draw, 
-                         (user_card_margin, current_y, width - user_card_margin, current_y + card_height), 
-                         10, fill=card_bg)
+    user_card_bbox = (user_card_margin, current_y, width - user_card_margin, current_y + card_height)
+    user_id = user_data.get('user_id', '')
+    await draw_user_card_bg(image, draw, user_id, data_dir, user_card_bbox, 10, fallback_fill=card_bg)
     
     # 列位置
     col1_x_without_avatar = user_card_margin + 20  # 第一列（使用新的边距）
@@ -313,8 +314,8 @@ async def _draw_backpack_image_impl(user_data: Dict[str, Any], data_dir: str) ->
     col2_x = col1_x + 300 # 第二列位置（初始，若头像改变后会重算）
     
     # 行位置
-    row1_y = current_y + 12
-    row2_y = current_y + 52
+    row1_y = current_y + 18
+    row2_y = current_y + 78
 
     # 绘制用户头像 - 如有
     if user_id := user_data.get('user_id'):
@@ -453,7 +454,10 @@ async def _draw_backpack_image_impl(user_data: Dict[str, Any], data_dir: str) ->
                 star_color = warning_color
             else:
                 star_color = text_secondary
-            draw.text((x + 15, y + 40), f"{format_rarity_display(rarity)} Lv.{refine_level}", font=small_font, fill=star_color)
+            # 使用图片渲染★
+            rarity_refine_text = f"{format_rarity_display(rarity)} Lv.{refine_level}"
+            draw_text_with_stars(image, draw, (x + 15, y + 40), rarity_refine_text, 
+                                 font=small_font, fill=star_color, star_size=18)
             
             # 装备状态和耐久度
             is_equipped = rod.get('is_equipped', False)
@@ -593,7 +597,10 @@ async def _draw_backpack_image_impl(user_data: Dict[str, Any], data_dir: str) ->
                 star_color = warning_color
             else:
                 star_color = text_secondary
-            draw.text((x + 15, y + 40), f"{format_rarity_display(rarity)} Lv.{refine_level}", font=small_font, fill=star_color)
+            # 使用图片渲染★
+            accessory_rarity_text = f"{format_rarity_display(rarity)} Lv.{refine_level}"
+            draw_text_with_stars(image, draw, (x + 15, y + 40), accessory_rarity_text, 
+                                 font=small_font, fill=star_color, star_size=18)
             
             # 装备状态
             is_equipped = accessory.get('is_equipped', False)
@@ -694,7 +701,9 @@ async def _draw_backpack_image_impl(user_data: Dict[str, Any], data_dir: str) ->
             # 稀有度
             rarity = bait.get('rarity', 1)
             star_color = rare_color if rarity > 4 else warning_color if rarity >= 3 else text_secondary
-            draw.text((x + 15, y + 30), format_rarity_display(rarity), font=tiny_font, fill=star_color)
+            # 使用图片渲染★
+            draw_text_with_stars(image, draw, (x + 15, y + 30), format_rarity_display(rarity), 
+                                 font=tiny_font, fill=star_color, star_size=16)
             
             # 数量
             quantity = bait.get('quantity', 0)
@@ -781,7 +790,9 @@ async def _draw_backpack_image_impl(user_data: Dict[str, Any], data_dir: str) ->
 
             rarity = item.get('rarity', 1)
             star_color = rare_color if rarity > 4 else warning_color if rarity >= 3 else text_secondary
-            draw.text((x + 15, y + 30), format_rarity_display(rarity), font=tiny_font, fill=star_color)
+            # 使用图片渲染★
+            draw_text_with_stars(image, draw, (x + 15, y + 30), format_rarity_display(rarity), 
+                                 font=tiny_font, fill=star_color, star_size=16)
 
             quantity = item.get('quantity', 0)
             draw.text((x + 15, y + 50), f"数量: {quantity}", font=tiny_font, fill=text_secondary)

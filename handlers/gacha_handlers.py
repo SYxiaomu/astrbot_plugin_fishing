@@ -8,6 +8,10 @@ from ..draw.wipe_bomb import (
     draw_wipe_bomb_result, draw_wipe_bomb_history, draw_wipe_bomb_error,
     save_image_to_temp as save_wb_image
 )
+from ..draw.gacha_detail import (
+    draw_gacha_result, draw_multi_ten_gacha_result,
+    save_image_to_temp as save_gacha_image
+)
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -84,15 +88,29 @@ async def gacha(self: "FishingPlugin", event: AstrMessageEvent):
     if result := self.gacha_service.perform_draw(user_id, pool_id, num_draws=1):
         if result["success"]:
             items = result.get("results", [])
-            message = f"🎉 抽卡成功！您抽到了 {len(items)} 件物品：\n"
-            for item in items:
-                # 构造输出信息
-                if item.get("type") == "coins":
-                    # 金币类型的物品
-                    message += f"⭐ {item['quantity']} 金币！\n"
-                else:
-                    message += f"{'⭐' * item.get('rarity', 1)} {item['name']}\n"
-            yield event.plain_result(message)
+            try:
+                user = self.user_repo.get_by_id(user_id)
+                nickname = user.nickname if user and user.nickname else user_id
+                pool = self.gacha_service.gacha_repo.get_pool_by_id(pool_id)
+                pool_name = pool.name if pool else None
+                image = await draw_gacha_result(
+                    items,
+                    title_text="🎰 抽卡结果",
+                    user_id=user_id,
+                    nickname=nickname,
+                    data_dir=self.data_dir,
+                    pool_name=pool_name
+                )
+                image_path = save_gacha_image(image, "gacha_result", self.data_dir)
+                yield event.image_result(image_path)
+            except Exception:
+                message = f"🎉 抽卡成功！您抽到了 {len(items)} 件物品：\n"
+                for item in items:
+                    if item.get("type") == "coins":
+                        message += f"⭐ {item['quantity']} 金币！\n"
+                    else:
+                        message += f"{'⭐' * item.get('rarity', 1)} {item['name']}\n"
+                yield event.plain_result(message)
         else:
             yield event.plain_result(f"❌ 抽卡失败：{result['message']}")
     else:
@@ -138,15 +156,29 @@ async def ten_gacha(self: "FishingPlugin", event: AstrMessageEvent):
     if result := self.gacha_service.perform_draw(user_id, pool_id, num_draws=10):
         if result["success"]:
             items = result.get("results", [])
-            message = f"🎉 十连抽卡成功！您抽到了 {len(items)} 件物品：\n"
-            for item in items:
-                # 构造输出信息
-                if item.get("type") == "coins":
-                    # 金币类型的物品
-                    message += f"⭐ {item['quantity']} 金币！\n"
-                else:
-                    message += f"{'⭐' * item.get('rarity', 1)} {item['name']}\n"
-            yield event.plain_result(message)
+            try:
+                user = self.user_repo.get_by_id(user_id)
+                nickname = user.nickname if user and user.nickname else user_id
+                pool = self.gacha_service.gacha_repo.get_pool_by_id(pool_id)
+                pool_name = pool.name if pool else None
+                image = await draw_gacha_result(
+                    items,
+                    title_text="🎰 十连结果",
+                    user_id=user_id,
+                    nickname=nickname,
+                    data_dir=self.data_dir,
+                    pool_name=pool_name
+                )
+                image_path = save_gacha_image(image, "ten_gacha_result", self.data_dir)
+                yield event.image_result(image_path)
+            except Exception:
+                message = f"🎉 十连抽卡成功！您抽到了 {len(items)} 件物品：\n"
+                for item in items:
+                    if item.get("type") == "coins":
+                        message += f"⭐ {item['quantity']} 金币！\n"
+                    else:
+                        message += f"{'⭐' * item.get('rarity', 1)} {item['name']}\n"
+                yield event.plain_result(message)
         else:
             yield event.plain_result(f"❌ 抽卡失败：{result['message']}")
     else:
@@ -214,34 +246,45 @@ async def multi_ten_gacha(self: "FishingPlugin", event: AstrMessageEvent, pool_i
             yield event.plain_result(f"❌ 第{i+1}次十连抽卡出错！")
             return
     
-    # 生成合并统计报告
-    message = f"🎉 {times}次十连抽卡完成！共获得 {total_items} 件物品：\n\n"
-    
-    # 消耗统计
-    message += f"【💰 消耗统计】\n"
-    message += f"消耗{cost_type}：{total_cost:,}{cost_unit}\n\n"
-    
-    # 稀有度统计
-    message += "【📊 稀有度统计】\n"
-    for rarity in [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]:  # 从高到低显示
-        count = rarity_counts[rarity]
-        if count > 0:
-            stars = "⭐" * rarity
-            message += f"{stars} {count} 件\n"
-    
-    # 金币统计
-    if coin_total > 0:
-        message += f"\n💰 金币总计：{coin_total}\n"
-    
-    # 物品统计（按稀有度排序）
-    if item_counts:
-        message += "\n【🎁 物品详情】\n"
-        # 按物品名称排序
-        sorted_items = sorted(item_counts.items())
-        for item_name, count in sorted_items:
-            message += f"{item_name} × {count}\n"
-    
-    yield event.plain_result(message)
+    # 生成合并统计报告（图片版）
+    try:
+        user = self.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user and user.nickname else user_id
+        pool_name = pool.name if pool else None
+        image = await draw_multi_ten_gacha_result(
+            times=times,
+            total_items=total_items,
+            total_cost=f"{total_cost:,}{cost_unit}",
+            cost_type=cost_type,
+            rarity_counts=rarity_counts,
+            item_counts=item_counts,
+            coin_total=coin_total,
+            pool_name=pool_name,
+            user_id=user_id,
+            nickname=nickname,
+            data_dir=self.data_dir
+        )
+        image_path = save_gacha_image(image, "multi_ten_gacha", self.data_dir)
+        yield event.image_result(image_path)
+    except Exception:
+        # 回退：文本输出
+        message = f"🎉 {times}次十连抽卡完成！共获得 {total_items} 件物品：\n\n"
+        message += f"【💰 消耗统计】\n"
+        message += f"消耗{cost_type}：{total_cost:,}{cost_unit}\n\n"
+        message += "【📊 稀有度统计】\n"
+        for rarity in [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]:
+            count = rarity_counts[rarity]
+            if count > 0:
+                stars = "⭐" * rarity
+                message += f"{stars} {count} 件\n"
+        if coin_total > 0:
+            message += f"\n💰 金币总计：{coin_total}\n"
+        if item_counts:
+            message += "\n【🎁 物品详情】\n"
+            sorted_items = sorted(item_counts.items())
+            for item_name, count in sorted_items:
+                message += f"{item_name} × {count}\n"
+        yield event.plain_result(message)
 
 
 async def view_gacha_pool(self: "FishingPlugin", event: AstrMessageEvent):
@@ -294,7 +337,9 @@ async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
     user_id = self._get_effective_user_id(event)
     args = event.message_str.split(" ")
     if len(args) < 2:
-        image = draw_wipe_bomb_error("请指定要擦弹的金额，例如：/擦弹 1000")
+        user = self.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user and user.nickname else user_id
+        image = await draw_wipe_bomb_error("请指定要擦弹的金额，例如：/擦弹 1000", user_id, nickname, self.data_dir)
         image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
         yield event.image_result(image_path)
         return
@@ -304,7 +349,9 @@ async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
         if user := self.user_repo.get_by_id(user_id):
             coins = user.coins
         else:
-            image = draw_wipe_bomb_error("您还没有注册，请先使用 /注册 命令注册。")
+            user = self.user_repo.get_by_id(user_id)
+            nickname = user.nickname if user and user.nickname else user_id
+            image = await draw_wipe_bomb_error("您还没有注册，请先使用 /注册 命令注册。", user_id, nickname, self.data_dir)
             image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
             yield event.image_result(image_path)
             return
@@ -315,7 +362,9 @@ async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
         contribution_amount = str(contribution_amount)
     # 判断是否为int或数字字符串
     if not contribution_amount.isdigit():
-        image = draw_wipe_bomb_error("擦弹金额必须是数字，请检查后重试。")
+        user = self.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user and user.nickname else user_id
+        image = await draw_wipe_bomb_error("擦弹金额必须是数字，请检查后重试。", user_id, nickname, self.data_dir)
         image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
         yield event.image_result(image_path)
         return
@@ -323,22 +372,29 @@ async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
         user_id, int(contribution_amount)
     ):
         if result["success"]:
-            image = draw_wipe_bomb_result(
+            user = self.user_repo.get_by_id(user_id)
+            nickname = user.nickname if user and user.nickname else user_id
+            image = await draw_wipe_bomb_result(
                 contribution=result["contribution"],
                 multiplier=result["multiplier"],
                 reward=result["reward"],
                 profit=result["profit"],
                 remaining_today=result["remaining_today"],
-                suppression_notice=result.get("suppression_notice", "")
+                suppression_notice=result.get("suppression_notice", ""),
+                user_id=user_id,
+                nickname=nickname,
+                data_dir=self.data_dir
             )
             image_path = save_wb_image(image, "wipe_bomb_result", self.data_dir)
             yield event.image_result(image_path)
         else:
-            image = draw_wipe_bomb_error(result['message'])
+            user = self.user_repo.get_by_id(user_id)
+            nickname = user.nickname if user and user.nickname else user_id
+            image = await draw_wipe_bomb_error(result['message'], user_id, nickname, self.data_dir)
             image_path = save_wb_image(image, "wipe_bomb_fail", self.data_dir)
             yield event.image_result(image_path)
     else:
-        image = draw_wipe_bomb_error("出错啦！请稍后再试。")
+        image = await draw_wipe_bomb_error("出错啦！请稍后再试。", user_id, None, self.data_dir)
         image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
         yield event.image_result(image_path)
 
@@ -346,11 +402,13 @@ async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
 async def wipe_bomb_history(self: "FishingPlugin", event: AstrMessageEvent):
     """查看擦弹记录"""
     user_id = self._get_effective_user_id(event)
+    user = self.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user and user.nickname else user_id
     if result := self.game_mechanics_service.get_wipe_bomb_history(user_id):
         if result["success"]:
             history = result.get("logs", [])
             if not history:
-                image = draw_wipe_bomb_error("您还没有擦弹记录。")
+                image = await draw_wipe_bomb_error("您还没有擦弹记录。", user_id, nickname, self.data_dir)
                 image_path = save_wb_image(image, "wipe_bomb_history_empty", self.data_dir)
                 yield event.image_result(image_path)
                 return
@@ -360,16 +418,16 @@ async def wipe_bomb_history(self: "FishingPlugin", event: AstrMessageEvent):
                 if hasattr(ts, 'strftime'):
                     record['timestamp'] = ts.strftime("%Y-%m-%d %H:%M:%S")
                 else:
-                    record['timestamp'] = str(ts)[:19]  # 截取前19个字符 (YYYY-MM-DD HH:MM:SS)
-            image = draw_wipe_bomb_history(history)
+                    record['timestamp'] = str(ts)[:19]
+            image = await draw_wipe_bomb_history(history, user_id, nickname, self.data_dir)
             image_path = save_wb_image(image, "wipe_bomb_history", self.data_dir)
             yield event.image_result(image_path)
         else:
-            image = draw_wipe_bomb_error(f"查看擦弹记录失败：{result['message']}")
+            image = await draw_wipe_bomb_error(f"查看擦弹记录失败：{result['message']}", user_id, nickname, self.data_dir)
             image_path = save_wb_image(image, "wipe_bomb_history_fail", self.data_dir)
             yield event.image_result(image_path)
     else:
-        image = draw_wipe_bomb_error("出错啦！请稍后再试。")
+        image = await draw_wipe_bomb_error("出错啦！请稍后再试。", user_id, nickname, self.data_dir)
         image_path = save_wb_image(image, "wipe_bomb_history_error", self.data_dir)
         yield event.image_result(image_path)
 
@@ -381,7 +439,7 @@ async def start_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
 
     if len(args) < 2:
         # 生成帮助图片
-        image = draw_wheel_of_fate_help()
+        image = await draw_wheel_of_fate_help()
         image_path = save_image_to_temp(image, "wheel_help", self.data_dir)
         yield event.image_result(image_path)
         return
@@ -403,10 +461,10 @@ async def start_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
         current_coins = user.coins if user else 0
         if "入场费" in formatted_message or "余额不足" in formatted_message:
             # 开始游戏失败（余额不足等）
-            image = draw_wheel_of_fate_start(entry_fee, current_coins)
+            image = await draw_wheel_of_fate_start(entry_fee, current_coins, user_id, user_nickname, self.data_dir)
         else:
             # 游戏进行中或成功
-            image = draw_wheel_of_fate_result(formatted_message, user_nickname)
+            image = await draw_wheel_of_fate_result(formatted_message, user_nickname, user_id, self.data_dir)
         
         image_path = save_image_to_temp(image, "wheel_start", self.data_dir)
         yield event.image_result(image_path)
@@ -422,7 +480,7 @@ async def continue_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent)
         formatted_message = result["message"].replace(f"[CQ:at,qq={user_id}]", f"@{user_nickname}")
         
         # 生成结果图片
-        image = draw_wheel_of_fate_result(formatted_message, user_nickname)
+        image = await draw_wheel_of_fate_result(formatted_message, user_nickname, user_id, self.data_dir)
         image_path = save_image_to_temp(image, "wheel_continue", self.data_dir)
         yield event.image_result(image_path)
 
@@ -437,7 +495,7 @@ async def stop_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
         formatted_message = result["message"].replace(f"[CQ:at,qq={user_id}]", f"@{user_nickname}")
         
         # 生成结果图片
-        image = draw_wheel_of_fate_result(formatted_message, user_nickname)
+        image = await draw_wheel_of_fate_result(formatted_message, user_nickname, user_id, self.data_dir)
         image_path = save_image_to_temp(image, "wheel_stop", self.data_dir)
         yield event.image_result(image_path)
 

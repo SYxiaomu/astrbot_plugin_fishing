@@ -104,6 +104,9 @@ class SqliteUserRepository(AbstractUserRepository):
             
             # --- [新功能] 添加交易所账户状态字段的读取 ---
             exchange_account_status=bool(row["exchange_account_status"]) if "exchange_account_status" in row_keys else False,
+
+            # --- [新功能] 用户自定义卡片背景 ---
+            card_bg_path=row["card_bg_path"] if "card_bg_path" in row_keys else None,
         )
 
     def get_by_id(self, user_id: str) -> Optional[User]:

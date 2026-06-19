@@ -462,7 +462,7 @@ class GameMechanicsService:
             prize = user.wof_current_prize
             self._reset_wof_state(user, cash_out_prize=prize)
             
-            message = f"[CQ:at,qq={user_id}] ⏰ 你的操作已超时，系统已自动为你结算当前奖金 {prize} 金币。"
+            message = f"[CQ:at,qq={user_id}] ⏰你的操作已超时，系统已自动为你结算\n💰当前奖金 {prize} 金币。"
             logger.info(f"用户 {user_id} 命运之轮超时，自动结算 {prize} 金币。")
             
             return {"success": True, "status": "timed_out", "message": message}
@@ -580,8 +580,8 @@ class GameMechanicsService:
             return {
                 "success": True, "status": "ongoing",
                 "message": (f"[CQ:at,qq={user_id}] 🎯 第 {user.wof_current_level} 层幸存！ (下一层成功率: {next_success_rate}%)\n"
-                            f"💰 当前累积奖金 {user.wof_current_prize} 金币。\n"
-                            f"⏱️ 请在{config.get('timeout_seconds', 60)}秒内回复【继续】或【放弃】！")
+                            f"💰当前累积奖金 {user.wof_current_prize} 金币。\n"
+                            f"⏲️请在{config.get('timeout_seconds', 60)}秒内回复【继续】或【放弃】！")
             }
         else:
             # 失败
@@ -589,8 +589,8 @@ class GameMechanicsService:
             self._reset_wof_state(user)
             return {
                 "success": True, "status": "lost",
-                "message": (f"[CQ:at,qq={user_id}] 💥 湮灭！ "
-                            f"你在通往第 {user.wof_current_level + 1} 层的路上失败了，失去了入场的 {lost_amount} 金币..."),
+                "message": (f"[CQ:at,qq={user_id}] 💥 湮灭！ \n"
+                            f"你在通往第 {user.wof_current_level + 1} 层的路上失败了\n失去了入场的 {lost_amount} 金币..."),
             }
 
     def cash_out_wheel_of_fate(self, user_id: str, is_final_win: bool = False) -> Dict[str, Any]:
@@ -608,11 +608,11 @@ class GameMechanicsService:
         self._reset_wof_state(user, cash_out_prize=prize)
 
         if is_final_win:
-            message = (f"🏆 [CQ:at,qq={user_id}] 命运的宠儿诞生了！ "
-                       f"你成功征服了命运之轮的10层，最终赢得了 {prize} 金币的神话级奖励！")
+            message = (f"🏆 [CQ:at,qq={user_id}] 命运的宠儿诞生了！ \n"
+                       f"你成功征服了命运之轮的10层\n最终赢得了 {prize} 金币的神话级奖励！")
         else:
-            message = (f"✅ [CQ:at,qq={user_id}] 明智的选择！ "
-                       f"你成功将 {prize} 金币带回了家，本次游戏净赚 {prize - entry} 金币。")
+            message = (f"✅ [CQ:at,qq={user_id}] 明智的选择！ \n"
+                       f"你成功将 {prize} 金币带回了家\n本次游戏净赚 {prize - entry} 金币。")
         
         return {"success": True, "status": "cashed_out", "message": message}
 

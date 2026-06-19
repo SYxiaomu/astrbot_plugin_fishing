@@ -1,16 +1,35 @@
+import os
 from astrbot.api.event import filter, AstrMessageEvent
 from ..utils import format_rarity_display, parse_target_user_id, parse_amount
+from ..draw.sell_result import draw_sell_result, draw_coins_balance
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..main import FishingPlugin
 
 
+async def _sell_image_result(plugin, event, result, prefix: str):
+    """通用出售结果图片输出辅助函数"""
+    user_id = plugin._get_effective_user_id(event)
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
+    image = await draw_sell_result(
+        result["message"],
+        user_id=user_id,
+        nickname=nickname,
+        data_dir=plugin.data_dir
+    )
+    image_path = os.path.join(plugin.tmp_dir, f"{prefix}_{user_id}.png")
+    image.save(image_path)
+    return image_path
+
+
 async def sell_all(plugin: "FishingPlugin", event: AstrMessageEvent):
     """卖出用户所有鱼"""
     user_id = plugin._get_effective_user_id(event)
     if result := plugin.inventory_service.sell_all_fish(user_id):
-        yield event.plain_result(result["message"])
+        image_path = await _sell_image_result(plugin, event, result, "sell_all")
+        yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -19,7 +38,8 @@ async def sell_keep(plugin: "FishingPlugin", event: AstrMessageEvent):
     """卖出用户鱼，但保留每种鱼一条"""
     user_id = plugin._get_effective_user_id(event)
     if result := plugin.inventory_service.sell_all_fish(user_id, keep_one=True):
-        yield event.plain_result(result["message"])
+        image_path = await _sell_image_result(plugin, event, result, "sell_keep")
+        yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -29,7 +49,8 @@ async def sell_everything(plugin: "FishingPlugin", event: AstrMessageEvent):
     user_id = plugin._get_effective_user_id(event)
     if result := plugin.inventory_service.sell_everything_except_locked(user_id):
         if result["success"]:
-            yield event.plain_result(result["message"])
+            image_path = await _sell_image_result(plugin, event, result, "sell_everything")
+            yield event.image_result(image_path)
         else:
             yield event.plain_result(f"❌ 砸锅卖铁失败：{result['message']}")
     else:
@@ -69,7 +90,8 @@ async def sell_by_rarity(plugin: "FishingPlugin", event: AstrMessageEvent):
 
         # 统一处理返回结果
         if result:
-            yield event.plain_result(result["message"])
+            image_path = await _sell_image_result(plugin, event, result, "sell_rarity")
+            yield event.image_result(image_path)
         else:
             yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -84,7 +106,8 @@ async def sell_all_rods(plugin: "FishingPlugin", event: AstrMessageEvent):
     user_id = plugin._get_effective_user_id(event)
     result = plugin.inventory_service.sell_all_rods(user_id)
     if result:
-        yield event.plain_result(result["message"])
+        image_path = await _sell_image_result(plugin, event, result, "sell_rods")
+        yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -94,7 +117,8 @@ async def sell_all_accessories(plugin: "FishingPlugin", event: AstrMessageEvent)
     user_id = plugin._get_effective_user_id(event)
     result = plugin.inventory_service.sell_all_accessories(user_id)
     if result:
-        yield event.plain_result(result["message"])
+        image_path = await _sell_image_result(plugin, event, result, "sell_accessories")
+        yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -102,7 +126,7 @@ async def sell_all_accessories(plugin: "FishingPlugin", event: AstrMessageEvent)
 async def shop(plugin: "FishingPlugin", event: AstrMessageEvent):
     """查看商店：/商店 [商店ID]"""
     args = event.message_str.split(" ")
-    # /商店 → 列表
+    # /商店 → 列表 → 图片输出
     if len(args) == 1:
         result = plugin.shop_service.get_shops()
         if not result or not result.get("success"):
@@ -116,38 +140,30 @@ async def shop(plugin: "FishingPlugin", event: AstrMessageEvent):
         # 对商店列表进行排序：按 sort_order 升序，然后按 shop_id 升序
         shops.sort(key=lambda x: (x.get("sort_order", 999), x.get("shop_id", 999)))
 
-        msg = "【🛒 商店列表】\n"
-        for s in shops:
-            stype = s.get("shop_type", "normal")
-            type_name = (
-                "普通"
-                if stype == "normal"
-                else ("高级" if stype == "premium" else "限时")
-            )
-            status = "🟢 营业中" if s.get("is_active") else "🔴 已关闭"
-            msg += (
-                f" - {s.get('name')} (ID: {s.get('shop_id')}) [{type_name}] {status}\n"
-            )
-            if s.get("description"):
-                msg += f"   - {s.get('description')}\n"
-        msg += "\n💡 使用「商店 商店ID」查看详情；使用「商店购买 商店ID 商品ID [数量]」购买\n"
+        try:
+            from ..draw.shop import draw_shop_list_image
 
-        # 检查消息长度，如果太长则分多次发送
-        if len(msg) > 1500:
-            # 分割消息
-            lines = msg.split("\n")
-            mid_point = len(lines) // 2
-
-            first_part = "\n".join(lines[:mid_point])
-            second_part = "\n".join(lines[mid_point:])
-
-            yield event.plain_result(first_part)
-            yield event.plain_result(second_part)
-        else:
+            image = await draw_shop_list_image(shops)
+            image_path = os.path.join(plugin.tmp_dir, "shop_list.png")
+            image.save(image_path)
+            yield event.image_result(image_path)
+        except Exception as e:
+            from astrbot.api import logger
+            logger.error(f"生成商店列表图片时发生错误: {e}", exc_info=True)
+            # 回退到文本输出
+            msg = "【🛒 商店列表】\n"
+            for s in shops:
+                stype = s.get("shop_type", "normal")
+                type_name = "普通" if stype == "normal" else ("高级" if stype == "premium" else "限时")
+                status = "🟢 营业中" if s.get("is_active") else "🔴 已关闭"
+                msg += f" - {s.get('name')} (ID: {s.get('shop_id')}) [{type_name}] {status}\n"
+                if s.get("description"):
+                    msg += f"   - {s.get('description')}\n"
+            msg += "\n💡 使用「商店 商店ID」查看详情；使用「商店购买 商店ID 商品ID [数量]」购买\n"
             yield event.plain_result(msg)
         return
 
-    # /商店 <ID> → 详情
+    # /商店 <ID> → 详情 → 图片输出
     shop_id = args[1]
     if not shop_id.isdigit():
         yield event.plain_result("❌ 商店ID必须是数字")
@@ -158,354 +174,40 @@ async def shop(plugin: "FishingPlugin", event: AstrMessageEvent):
         return
     shop = detail["shop"]
     items = detail.get("items", [])
-    msg = f"【🛒 {shop.get('name')}】(ID: {shop.get('shop_id')})\n"
-    if shop.get("description"):
-        msg += f"📖 {shop.get('description')}\n"
+
     if not items:
+        msg = f"【🛒 {shop.get('name')}】(ID: {shop.get('shop_id')})\n"
+        if shop.get("description"):
+            msg += f"📖 {shop.get('description')}\n"
         msg += "\n📭 当前没有在售商品。"
         yield event.plain_result(msg)
         return
-    msg += "\n🛍️ 【在售商品】\n"
-    msg += "═" * 50 + "\n"
-    for i, e in enumerate(items):
-        item = e["item"]
-        costs = e["costs"]
-        rewards = e.get("rewards", [])
 
-        # 获取商品稀有度和emoji
-        rarity = 1
-        item_emoji = "📦"
-        rarity_stars = "⭐"
+    try:
+        from ..draw.shop import draw_shop_image
 
-        if rewards:
-            # 如果奖励物品超过2个，使用礼包emoji
-            if len(rewards) > 2:
-                item_emoji = "🎁"
-                # 计算平均稀有度
-                total_rarity = 0
-                for reward in rewards:
-                    if reward["reward_type"] == "rod":
-                        rod_template = plugin.item_template_repo.get_rod_by_id(
-                            reward.get("reward_item_id")
-                        )
-                        if rod_template:
-                            total_rarity += rod_template.rarity
-                    elif reward["reward_type"] == "bait":
-                        bait_template = plugin.item_template_repo.get_bait_by_id(
-                            reward.get("reward_item_id")
-                        )
-                        if bait_template:
-                            total_rarity += bait_template.rarity
-                    elif reward["reward_type"] == "accessory":
-                        accessory_template = (
-                            plugin.item_template_repo.get_accessory_by_id(
-                                reward.get("reward_item_id")
-                            )
-                        )
-                        if accessory_template:
-                            total_rarity += accessory_template.rarity
-                    elif reward["reward_type"] == "item":
-                        item_template = plugin.item_template_repo.get_by_id(
-                            reward.get("reward_item_id")
-                        )
-                        if item_template:
-                            total_rarity += item_template.rarity
-                rarity = max(1, total_rarity // len(rewards))  # 取平均稀有度，最少1星
-            else:
-                # 单个或两个物品，使用第一个物品的类型和稀有度
-                reward = rewards[0]
-                if reward["reward_type"] == "rod":
-                    rod_template = plugin.item_template_repo.get_rod_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if rod_template:
-                        rarity = rod_template.rarity
-                        item_emoji = "🎣"
-                elif reward["reward_type"] == "bait":
-                    bait_template = plugin.item_template_repo.get_bait_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if bait_template:
-                        rarity = bait_template.rarity
-                        item_emoji = "🪱"
-                elif reward["reward_type"] == "accessory":
-                    accessory_template = plugin.item_template_repo.get_accessory_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if accessory_template:
-                        rarity = accessory_template.rarity
-                        item_emoji = "💍"
-                elif reward["reward_type"] == "item":
-                    item_template = plugin.item_template_repo.get_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if item_template:
-                        rarity = item_template.rarity
-                        # 根据道具名称选择合适的emoji
-                        item_name = item_template.name.lower()
-                        if "沙漏" in item_name or "时运" in item_name:
-                            item_emoji = "⏳"
-                        elif "令牌" in item_name or "通行证" in item_name:
-                            item_emoji = "🎫"
-                        elif "护符" in item_name or "神佑" in item_name:
-                            item_emoji = "🛡️"
-                        elif "钱袋" in item_name:
-                            item_emoji = "💰"
-                        elif "海图" in item_name or "地图" in item_name:
-                            item_emoji = "🗺️"
-                        elif "香" in item_name or "驱灵" in item_name:
-                            item_emoji = "🕯️"
-                        elif "许可证" in item_name or "擦弹" in item_name:
-                            item_emoji = "📋"
-                        elif "符" in item_name or "符文" in item_name:
-                            item_emoji = "🔮"
-                        elif "海灵" in item_name or "守护" in item_name:
-                            item_emoji = "🌊"
-                        elif "斗篷" in item_name or "暗影" in item_name:
-                            item_emoji = "🪶"
-                        elif "药水" in item_name or "幸运" in item_name:
-                            item_emoji = "🧪"
-                        elif "声呐" in item_name or "便携" in item_name:
-                            item_emoji = "📡"
-                        else:
-                            item_emoji = "📦"  # 默认道具emoji
-
-        # 根据稀有度设置星星
-        if rarity == 1:
-            rarity_stars = "⭐"
-        elif rarity == 2:
-            rarity_stars = "⭐⭐"
-        elif rarity == 3:
-            rarity_stars = "⭐⭐⭐"
-        elif rarity == 4:
-            rarity_stars = "⭐⭐⭐⭐"
-        elif rarity == 5:
-            rarity_stars = "⭐⭐⭐⭐⭐"
-        else:
-            rarity_stars = "⭐" * min(rarity, 10)
-            if rarity > 10:
-                rarity_stars += "+"
-
-        # 按组ID分组成本
-        cost_groups = {}
-        for c in costs:
-            group_id = c.get("group_id", 1)  # 默认组ID为1
-            if group_id not in cost_groups:
-                cost_groups[group_id] = []
-            cost_groups[group_id].append(c)
-
-        # 构建成本字符串
-        group_parts = []
-        for group_id in sorted(cost_groups.keys()):
-            group_costs = cost_groups[group_id]
-            group_parts_inner = []
-
-            for c in group_costs:
-                cost_text = ""
+        image = await draw_shop_image(shop, items, plugin.item_template_repo, plugin.data_dir)
+        image_path = os.path.join(plugin.tmp_dir, f"shop_{shop_id}.png")
+        image.save(image_path)
+        yield event.image_result(image_path)
+    except Exception as e:
+        from astrbot.api import logger
+        logger.error(f"生成商店图片时发生错误: {e}", exc_info=True)
+        # 回退到文本输出
+        msg = f"【🛒 {shop.get('name')}】(ID: {shop.get('shop_id')})\n"
+        if shop.get("description"):
+            msg += f"📖 {shop.get('description')}\n"
+        for i, e in enumerate(items):
+            item = e["item"]
+            costs = e["costs"]
+            msg += f"\n - {item['name']} (ID: {item['item_id']})\n"
+            for c in costs:
                 if c["cost_type"] == "coins":
-                    cost_text = f"💰 {c['cost_amount']} 金币"
-                elif c["cost_type"] == "premium":
-                    cost_text = f"💎 {c['cost_amount']} 高级货币"
-                elif c["cost_type"] == "item":
-                    # 获取道具名称
-                    item_template = plugin.item_template_repo.get_by_id(
-                        c.get("cost_item_id")
-                    )
-                    item_name = (
-                        item_template.name
-                        if item_template
-                        else f"道具#{c.get('cost_item_id')}"
-                    )
-                    cost_text = f"🎁 {item_name} x{c['cost_amount']}"
-                elif c["cost_type"] == "fish":
-                    # 获取鱼类名称
-                    fish_template = plugin.item_template_repo.get_fish_by_id(
-                        c.get("cost_item_id")
-                    )
-                    fish_name = (
-                        fish_template.name
-                        if fish_template
-                        else f"鱼类#{c.get('cost_item_id')}"
-                    )
-                    # 显示品质信息
-                    quality_level = c.get("quality_level", 0)
-                    if quality_level == 1:
-                        fish_name += " ✨高品质"
-                    cost_text = f"🐟 {fish_name} x{c['cost_amount']}"
-                elif c["cost_type"] == "rod":
-                    # 获取鱼竿名称
-                    rod_template = plugin.item_template_repo.get_rod_by_id(
-                        c.get("cost_item_id")
-                    )
-                    rod_name = (
-                        rod_template.name
-                        if rod_template
-                        else f"鱼竿#{c.get('cost_item_id')}"
-                    )
-                    cost_text = f"🎣 {rod_name} x{c['cost_amount']}"
-                elif c["cost_type"] == "accessory":
-                    # 获取饰品名称
-                    accessory_template = plugin.item_template_repo.get_accessory_by_id(
-                        c.get("cost_item_id")
-                    )
-                    accessory_name = (
-                        accessory_template.name
-                        if accessory_template
-                        else f"饰品#{c.get('cost_item_id')}"
-                    )
-                    cost_text = f"💍 {accessory_name} x{c['cost_amount']}"
-
-                group_parts_inner.append(cost_text)
-
-            # 根据组内关系连接
-            if len(group_parts_inner) == 1:
-                group_parts.append(group_parts_inner[0])
-            else:
-                # 检查组内关系
-                relation = group_costs[0].get("cost_relation", "and")
-                if relation == "or":
-                    group_parts.append(f"({' OR '.join(group_parts_inner)})")
-                else:  # and
-                    group_parts.append(" + ".join(group_parts_inner))
-
-        # 连接不同组（组间是AND关系）
-        cost_str = " + ".join(group_parts) if group_parts else "免费"
-        stock_str = (
-            "无限"
-            if item.get("stock_total") is None
-            else f"{item.get('stock_sold',0)}/{item.get('stock_total')}"
-        )
-
-        # 获取限购信息
-        per_user_limit = item.get("per_user_limit")
-        per_user_daily_limit = item.get("per_user_daily_limit")
-
-        # 获取限时信息
-        start_time = item.get("start_time")
-        end_time = item.get("end_time")
-
-        # 美化输出格式
-        msg += f"┌─ {item_emoji} {item['name']} {rarity_stars}\n"
-        msg += f"├─ 价格: {cost_str}\n"
-        msg += f"├─ 库存: {stock_str}\n"
-        msg += f"├─ ID: {item['item_id']}\n"
-
-        # 添加限购信息
-        limit_info = []
-        if per_user_limit is not None:
-            limit_info.append(f"每人限购: {per_user_limit}")
-        if per_user_daily_limit is not None:
-            limit_info.append(f"每日限购: {per_user_daily_limit}")
-
-        if limit_info:
-            msg += f"├─ 限购: {' | '.join(limit_info)}\n"
-
-        # 添加限时信息
-        time_info = []
-        current_time = None
-        from datetime import datetime
-
-        try:
-            current_time = datetime.now()
-        except:
-            pass
-
-        if start_time:
-            if isinstance(start_time, str):
-                try:
-                    start_time = datetime.fromisoformat(
-                        start_time.replace("Z", "+00:00")
-                    )
-                except:
-                    pass
-            if isinstance(start_time, datetime):
-                if current_time and current_time < start_time:
-                    time_info.append(f"未开始: {start_time.strftime('%m-%d %H:%M')}")
-                else:
-                    time_info.append(f"开始: {start_time.strftime('%m-%d %H:%M')}")
-
-        if end_time:
-            if isinstance(end_time, str):
-                try:
-                    end_time = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
-                except:
-                    pass
-            if isinstance(end_time, datetime):
-                if current_time and current_time > end_time:
-                    time_info.append(f"已结束: {end_time.strftime('%m-%d %H:%M')}")
-                else:
-                    time_info.append(f"结束: {end_time.strftime('%m-%d %H:%M')}")
-
-        if time_info:
-            msg += f"├─ 限时: {' | '.join(time_info)}\n"
-
-        # 如果包含多个物品（≥2），显示礼包包含的物品
-        if len(rewards) >= 2:
-            msg += "├─ 包含物品:\n"
-            for reward in rewards:
-                item_name = "未知物品"
-                item_emoji = "📦"
-
-                if reward["reward_type"] == "rod":
-                    rod_template = plugin.item_template_repo.get_rod_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if rod_template:
-                        item_name = rod_template.name
-                        item_emoji = "🎣"
-                elif reward["reward_type"] == "bait":
-                    bait_template = plugin.item_template_repo.get_bait_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if bait_template:
-                        item_name = bait_template.name
-                        item_emoji = "🪱"
-                elif reward["reward_type"] == "accessory":
-                    accessory_template = plugin.item_template_repo.get_accessory_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if accessory_template:
-                        item_name = accessory_template.name
-                        item_emoji = "💍"
-                elif reward["reward_type"] == "item":
-                    item_template = plugin.item_template_repo.get_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if item_template:
-                        item_name = item_template.name
-                        item_emoji = "🎁"
-                elif reward["reward_type"] == "fish":
-                    fish_template = plugin.item_template_repo.get_fish_by_id(
-                        reward.get("reward_item_id")
-                    )
-                    if fish_template:
-                        item_name = fish_template.name
-                        # 显示品质信息
-                        quality_level = reward.get("quality_level", 0)
-                        if quality_level == 1:
-                            item_name += " ✨高品质"
-                        item_emoji = "🐟"
-                elif reward["reward_type"] == "coins":
-                    item_name = "金币"
-                    item_emoji = "💰"
-
-                msg += f"│   • {item_emoji} {item_name}"
-                if reward.get("reward_quantity", 1) > 1:
-                    msg += f" x{reward['reward_quantity']}"
-                msg += "\n"
-
-        if item.get("description"):
-            msg += f"└─ {item['description']}\n"
-        else:
-            msg += "└─\n"
-
-        # 添加商品之间的分隔符（除了最后一个商品）
-        if i < len(items) - 1:
-            msg += "─" * 30 + "\n"
-    msg += "═" * 50 + "\n"
-    msg += "💡 购买：商店购买 商店ID 商品ID [数量]\n"
-    msg += "示例：商店购买 1 2 5"
-    yield event.plain_result(msg)
+                    msg += f"   💰 {c['cost_amount']}金币\n"
+            if item.get("description"):
+                msg += f"   {item['description']}\n"
+        msg += "\n💡 购买：商店购买 商店ID 商品ID [数量]"
+        yield event.plain_result(msg)
 
 
 async def buy_in_shop(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -589,7 +291,7 @@ async def market(plugin: "FishingPlugin", event: AstrMessageEvent):
             # 为鱼类添加品质显示
             quality_str = ""
             if item.item_type == "fish" and hasattr(item, "quality_level") and item.quality_level == 1:
-                quality_str = " ✨高品质"
+                quality_str = "✨高品质"
             
             msg += f" - {item.item_name}{quality_str}{refine_level_str}{quantity_text} (ID: {display_code}) - 价格: {item.price} 金币\n"
             msg += f" - 售卖人： {seller_display}"

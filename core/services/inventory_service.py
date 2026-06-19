@@ -715,6 +715,48 @@ class InventoryService:
         self.user_repo.update(user)
         return {"success": True, "message": f"💰 成功卖出 {len(rods_to_sell)} 根鱼竿，获得 {total_value} 金币"}
 
+    def sell_all_accessories(self, user_id: str) -> Dict[str, Any]:
+        """
+        向系统出售所有未锁定且未装备的饰品。
+        """
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            return {"success": False, "message": "用户不存在"}
+
+        # 获取用户的饰品库存
+        user_accessories = self.inventory_repo.get_user_accessory_instances(user_id)
+        if not user_accessories:
+            return {"success": False, "message": "❌ 你没有可以卖出的饰品"}
+
+        total_value = 0
+        accessories_to_sell = []
+        
+        # 只计算可以卖出的饰品（未锁定、未装备）
+        for accessory_instance in user_accessories:
+            if accessory_instance.is_equipped or accessory_instance.is_locked:
+                continue
+            accessory_template = self.item_template_repo.get_accessory_by_id(accessory_instance.accessory_id)
+            if accessory_template:
+                sell_price = self.game_mechanics_service.calculate_sell_price(
+                    item_type="accessory",
+                    rarity=accessory_template.rarity,
+                    refine_level=accessory_instance.refine_level,
+                )
+                total_value += sell_price
+                accessories_to_sell.append(accessory_instance)
+        
+        if total_value == 0:
+            return {"success": False, "message": "❌ 没有可以卖出的饰品（已自动保留锁定或已装备的饰品）"}
+        
+        # 逐个删除可以卖出的饰品
+        for accessory_instance in accessories_to_sell:
+            self.inventory_repo.delete_accessory_instance(accessory_instance.accessory_instance_id)
+        
+        # 更新用户金币
+        user.coins += total_value
+        self.user_repo.update(user)
+        return {"success": True, "message": f"💰 成功卖出 {len(accessories_to_sell)} 件饰品，获得 {total_value} 金币"}
+
     def equip_item(self, user_id: str, instance_id: int, item_type: str) -> Dict[str, Any]:
         """
         装备一个物品（鱼竿或饰品）。

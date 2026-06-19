@@ -121,7 +121,7 @@ async def pond(plugin: "FishingPlugin", event: AstrMessageEvent):
         }
 
         # 生成图片
-        image = await draw_fish_pond_image(pond_data, user_data)
+        image = await draw_fish_pond_image(pond_data, user_data, data_dir=plugin.data_dir)
         image_path = os.path.join(plugin.tmp_dir, "fish_pond.png")
         image.save(image_path)
         yield event.image_result(image_path)
@@ -221,7 +221,7 @@ async def peek_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
         }
 
         # 生成图片
-        image = await draw_fish_pond_image(pond_data, user_data)
+        image = await draw_fish_pond_image(pond_data, user_data, data_dir=plugin.data_dir)
         image_path = os.path.join(plugin.tmp_dir, f"peek_pond_{target_user_id}.png")
         image.save(image_path)
         yield event.image_result(image_path)
@@ -286,60 +286,54 @@ async def upgrade_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
 async def rod(plugin: "FishingPlugin", event: AstrMessageEvent):
     """查看用户鱼竿信息"""
     user_id = plugin._get_effective_user_id(event)
-    rod_info = plugin.inventory_service.get_user_rod_inventory(user_id)
-    if rod_info and rod_info["rods"]:
-        all_rods = rod_info["rods"]
-        total_count = len(all_rods)
-        
-        # 智能过滤：鱼竿过多时只显示5星以上
-        rods = all_rods
-        is_filtered = False
-        
-        if total_count > 30:
-            high_rarity_rods = [r for r in all_rods if r.get('rarity', 1) >= 5]
-            if len(high_rarity_rods) > 0:
-                # 即使5星以上也限制最多100项
-                rods = high_rarity_rods[:100]
-                is_filtered = True
-            else:
-                # 如果没有5星以上，按稀有度排序取前50个
-                rods = sorted(all_rods, key=lambda x: x.get('rarity', 1), reverse=True)[:50]
-                is_filtered = True
-        
-        displayed_count = len(rods)
+    user = plugin.user_repo.get_by_id(user_id)
+    if not user:
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
 
-        # 构造输出信息,附带emoji
+    rod_info = plugin.inventory_service.get_user_rod_inventory(user_id)
+    all_rods = rod_info.get("rods", []) if rod_info else []
+    total_count = len(all_rods)
+
+    # 智能过滤：鱼竿过多时只显示5星以上
+    rods = all_rods
+    is_filtered = False
+
+    if total_count > 30:
+        high_rarity_rods = [r for r in all_rods if r.get('rarity', 1) >= 5]
+        if len(high_rarity_rods) > 0:
+            rods = high_rarity_rods[:100]
+            is_filtered = True
+        else:
+            rods = sorted(all_rods, key=lambda x: x.get('rarity', 1), reverse=True)[:50]
+            is_filtered = True
+
+    displayed_count = len(rods)
+    nickname = user.nickname or user_id
+
+    try:
+        from ..draw.inventory_detail import draw_rods_image
+        image = await draw_rods_image(rods, user_id, nickname, is_filtered, total_count, displayed_count, plugin.data_dir)
+        image_path = os.path.join(plugin.tmp_dir, "rods_detail.png")
+        image.save(image_path)
+        yield event.image_result(image_path)
+    except Exception as e:
+        from astrbot.api import logger
+        logger.error(f"生成鱼竿图片时发生错误: {e}", exc_info=True)
+        # 回退到文本输出
         if is_filtered:
             message = f"【🎣 鱼竿】共 {total_count} 根，仅显示高品质鱼竿 {displayed_count} 根：\n"
             message += "💡 提示：数量过多，仅显示5星以上鱼竿\n\n"
         else:
             message = f"【🎣 鱼竿】共 {total_count} 根：\n"
-        
-        for rod in rods:
-            message += format_accessory_or_rod(rod)
-            if (
-                rod.get("bonus_rare_fish_chance", 1) != 1
-                and rod.get("bonus_fish_weight", 1.0) != 1.0
-            ):
-                message += f"   - 钓上鱼鱼类几率加成: {to_percentage(rod['bonus_rare_fish_chance'])}\n"
-            message += f"   -精炼等级: {rod.get('refine_level', 1)}\n"
-
-        # 检查消息长度，如果太长则截断
+        for r in rods:
+            message += format_accessory_or_rod(r)
+            if (r.get("bonus_rare_fish_chance", 1) != 1 and r.get("bonus_fish_weight", 1.0) != 1.0):
+                message += f"   - 钓上鱼鱼类几率加成: {to_percentage(r['bonus_rare_fish_chance'])}\n"
+            message += f"   -精炼等级: {r.get('refine_level', 1)}\n"
         if len(message) > 3000:
-            message = (
-                message[:3000]
-                + "\n\n📝 消息过长已截断。"
-            )
-        
-        # 如果被过滤，添加清理建议
-        if is_filtered:
-            message += "\n\n🧹 建议及时清理低品质鱼竿：\n"
-            message += "• /出售所有鱼竿 - 快速清理低品质鱼竿\n"
-            message += "• /出售 [鱼竿ID] - 出售指定鱼竿"
-
+            message = message[:3000] + "\n\n📝 消息过长已截断。"
         yield event.plain_result(message)
-    else:
-        yield event.plain_result("🎣 您还没有鱼竿，快去商店购买或抽奖获得吧！")
 
 
 async def bait(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -365,12 +359,33 @@ async def bait(plugin: "FishingPlugin", event: AstrMessageEvent):
 
 
 async def items(plugin: "FishingPlugin", event: AstrMessageEvent):
-    """查看用户道具信息（文本版）"""
+    """查看用户道具信息（图片版）"""
     user_id = plugin._get_effective_user_id(event)
+    user = plugin.user_repo.get_by_id(user_id)
+    if not user:
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
+
     item_info = plugin.inventory_service.get_user_item_inventory(user_id)
-    if item_info and item_info.get("items"):
+    items_list = item_info.get("items", []) if item_info else []
+    nickname = user.nickname or user_id
+
+    if not items_list:
+        yield event.plain_result("📦 您还没有道具。")
+        return
+
+    try:
+        from ..draw.inventory_detail import draw_items_image
+        image = await draw_items_image(items_list, user_id, nickname, plugin.data_dir)
+        image_path = os.path.join(plugin.tmp_dir, "items_detail.png")
+        image.save(image_path)
+        yield event.image_result(image_path)
+    except Exception as e:
+        from astrbot.api import logger
+        logger.error(f"生成道具图片时发生错误: {e}", exc_info=True)
+        # 回退到文本输出
         message = "【📦 道具】：\n"
-        for it in item_info["items"]:
+        for it in items_list:
             item_id = int(it.get("item_id", 0) or 0)
             dcode = f"D{item_id}" if item_id else "D0"
             consumable_text = "消耗品" if it.get("is_consumable") else "非消耗"
@@ -379,8 +394,6 @@ async def items(plugin: "FishingPlugin", event: AstrMessageEvent):
                 message += f"   - 效果: {it['effect_description']}\n"
             message += "\n"
         yield event.plain_result(message)
-    else:
-        yield event.plain_result("📦 您还没有道具。")
 
 
 async def use_item(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -434,55 +447,52 @@ async def open_all_money_bags(plugin: "FishingPlugin", event: AstrMessageEvent):
 async def accessories(plugin: "FishingPlugin", event: AstrMessageEvent):
     """查看用户饰品信息"""
     user_id = plugin._get_effective_user_id(event)
-    accessories_info = plugin.inventory_service.get_user_accessory_inventory(user_id)
-    if accessories_info and accessories_info["accessories"]:
-        all_accessories = accessories_info["accessories"]
-        total_count = len(all_accessories)
-        
-        # 智能过滤：饰品过多时只显示5星以上
-        accessories = all_accessories
-        is_filtered = False
-        
-        if total_count > 30:
-            high_rarity_accessories = [a for a in all_accessories if a.get('rarity', 1) >= 5]
-            if len(high_rarity_accessories) > 0:
-                # 即使5星以上也限制最多100项
-                accessories = high_rarity_accessories[:100]
-                is_filtered = True
-            else:
-                # 如果没有5星以上，按稀有度排序取前50个
-                accessories = sorted(all_accessories, key=lambda x: x.get('rarity', 1), reverse=True)[:50]
-                is_filtered = True
-        
-        displayed_count = len(accessories)
+    user = plugin.user_repo.get_by_id(user_id)
+    if not user:
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
 
-        # 构造输出信息,附带emoji
+    accessories_info = plugin.inventory_service.get_user_accessory_inventory(user_id)
+    all_accessories = accessories_info.get("accessories", []) if accessories_info else []
+    total_count = len(all_accessories)
+
+    # 智能过滤：饰品过多时只显示5星以上
+    accessories_list = all_accessories
+    is_filtered = False
+
+    if total_count > 30:
+        high_rarity_accessories = [a for a in all_accessories if a.get('rarity', 1) >= 5]
+        if len(high_rarity_accessories) > 0:
+            accessories_list = high_rarity_accessories[:100]
+            is_filtered = True
+        else:
+            accessories_list = sorted(all_accessories, key=lambda x: x.get('rarity', 1), reverse=True)[:50]
+            is_filtered = True
+
+    displayed_count = len(accessories_list)
+    nickname = user.nickname or user_id
+
+    try:
+        from ..draw.inventory_detail import draw_accessories_image
+        image = await draw_accessories_image(accessories_list, user_id, nickname, is_filtered, total_count, displayed_count, plugin.data_dir)
+        image_path = os.path.join(plugin.tmp_dir, "accessories_detail.png")
+        image.save(image_path)
+        yield event.image_result(image_path)
+    except Exception as e:
+        from astrbot.api import logger
+        logger.error(f"生成饰品图片时发生错误: {e}", exc_info=True)
+        # 回退到文本输出
         if is_filtered:
             message = f"【💍 饰品】共 {total_count} 个，仅显示高品质饰品 {displayed_count} 个：\n"
             message += "💡 提示：数量过多，仅显示5星以上饰品\n\n"
         else:
             message = f"【💍 饰品】共 {total_count} 个：\n"
-        
-        for accessory in accessories:
+        for accessory in accessories_list:
             message += format_accessory_or_rod(accessory)
             message += f"   -精炼等级: {accessory.get('refine_level', 1)}\n"
-
-        # 检查消息长度，如果太长则截断
         if len(message) > 3000:
-            message = (
-                message[:3000]
-                + "\n\n📝 消息过长已截断。"
-            )
-        
-        # 如果被过滤，添加清理建议
-        if is_filtered:
-            message += "\n\n🧹 建议及时清理低品质饰品：\n"
-            message += "• /出售所有饰品 - 快速清理低品质饰品\n"
-            message += "• /出售 [饰品ID] - 出售指定饰品"
-
+            message = message[:3000] + "\n\n📝 消息过长已截断。"
         yield event.plain_result(message)
-    else:
-        yield event.plain_result("💍 您还没有饰品，快去商店购买或抽奖获得吧！")
 
 
 async def refine_help(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -999,18 +1009,20 @@ async def unlock_equipment(plugin: "FishingPlugin", event: AstrMessageEvent, equ
 
 
 async def coins(plugin: "FishingPlugin", event: AstrMessageEvent):
-    """查看用户金币信息"""
+    """查看用户金币和高级货币信息"""
     user_id = plugin._get_effective_user_id(event)
     if user := plugin.user_repo.get_by_id(user_id):
-        yield event.plain_result(f"💰 您的金币余额：{user.coins} 金币")
-    else:
-        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
-
-
-async def premium(plugin: "FishingPlugin", event: AstrMessageEvent):
-    """查看用户高级货币信息"""
-    user_id = plugin._get_effective_user_id(event)
-    if user := plugin.user_repo.get_by_id(user_id):
-        yield event.plain_result(f"💎 您的高级货币余额：{user.premium_currency}")
+        from ..draw.sell_result import draw_coins_balance
+        nickname = user.nickname or user_id
+        image = await draw_coins_balance(
+            user.coins,
+            premium_currency=user.premium_currency,
+            user_id=user_id,
+            nickname=nickname,
+            data_dir=plugin.data_dir
+        )
+        image_path = os.path.join(plugin.tmp_dir, f"coins_{user_id}.png")
+        image.save(image_path)
+        yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")

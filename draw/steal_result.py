@@ -8,6 +8,8 @@ from .styles import (
     COLOR_GOLD, COLOR_RARE, COLOR_REFINE_RED, COLOR_REFINE_ORANGE,
     COLOR_CORNER, COLOR_SUCCESS, COLOR_ERROR, load_font_with_emoji_fallback
 )
+from .star_renderer import draw_text_with_stars
+from .utils import draw_user_card_bg
 
 
 def format_rarity_display(rarity: int) -> str:
@@ -17,18 +19,18 @@ def format_rarity_display(rarity: int) -> str:
         return '★★★★★★★★★★+'
 
 
-async def draw_steal_result_image(steal_data: Dict[str, Any]) -> Image.Image:
+async def draw_steal_result_image(steal_data: Dict[str, Any], data_dir: str = None) -> Image.Image:
     import asyncio
     try:
         return await asyncio.wait_for(
-            _draw_steal_result_impl(steal_data),
+            _draw_steal_result_impl(steal_data, data_dir),
             timeout=10.0
         )
     except asyncio.TimeoutError:
         return _create_steal_fallback_image(steal_data)
 
 
-async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
+async def _draw_steal_result_impl(steal_data: Dict[str, Any], data_dir: str = None) -> Image.Image:
     from .gradient_utils import create_vertical_gradient
     from .text_utils import get_text_size_cached, wrap_text_by_width_optimized, create_text_cache
 
@@ -63,7 +65,7 @@ async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
     # ---- 动态高度 ----
     CARD_PAD = 30
     TITLE_H = 60
-    USER_CARD_H = 80
+    USER_CARD_H = 120
     FOOTER_H = 60
     LINE_H = 28
     FISH_CARD_H = 100
@@ -121,16 +123,19 @@ async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
     cur_y += TITLE_H
 
     # ---- 用户卡片 ----
-    draw_rounded_rect((CARD_PAD, cur_y, width - CARD_PAD, cur_y + USER_CARD_H), 10, card_bg)
+    thief_id = steal_data.get('thief_id', '')
+    await draw_user_card_bg(image, draw, thief_id, data_dir,
+                            (CARD_PAD, cur_y, width - CARD_PAD, cur_y + USER_CARD_H),
+                            10, fallback_fill=card_bg)
     cx = CARD_PAD + 20
 
     thief_name = steal_data.get('thief_name', '未知用户')
     victim_name = steal_data.get('victim_name', '未知用户')
-    draw.text((cx, cur_y + 14), f"{thief_name}  →  {victim_name}", font=subtitle_font, fill=primary_medium)
+    draw.text((cx, cur_y + 21), f"{thief_name}  →  {victim_name}", font=subtitle_font, fill=primary_medium)
 
     status_text = "偷鱼成功" if success else "偷鱼失败"
     status_color = success_color if success else error_color
-    draw.text((cx, cur_y + 46), status_text, font=small_font, fill=status_color)
+    draw.text((cx, cur_y + 69), status_text, font=small_font, fill=status_color)
     cur_y += USER_CARD_H + 20
 
     # ---- 鱼卡片列表 ----
@@ -150,7 +155,8 @@ async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
                 rarity_color = text_secondary
 
             rarity_label = f"稀有度: {format_rarity_display(rarity)}"
-            draw.text((cx, fy + 12), rarity_label, font=small_font, fill=rarity_color)
+            draw_text_with_stars(image, draw, (cx, fy + 12), rarity_label, 
+                                 font=small_font, fill=rarity_color, star_size=16)
 
             info_y = fy + 40
 

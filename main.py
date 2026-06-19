@@ -523,6 +523,12 @@ class FishingPlugin(Star):
         async for r in common_handlers.fishing_help(self, event):
             yield r
 
+    @filter.command("卡片背景", alias={"自定义卡片", "卡片背景图", "卡片设置"})
+    async def set_card_bg(self, event: AstrMessageEvent):
+        """设置个人信息卡片的自定义背景图。用法：/卡片背景 + 图片 或 /卡片背景 重置"""
+        async for r in common_handlers.set_card_bg(self, event):
+            yield r
+
     # =========== 背包与资产 ==========
 
     @filter.command("背包", alias={"查看背包", "我的背包"})
@@ -656,12 +662,6 @@ class FishingPlugin(Star):
     async def update_nickname(self, event: AstrMessageEvent):
         """更新你的游戏昵称。用法：更新昵称 新昵称"""
         async for r in common_handlers.update_nickname(self, event):
-            yield r
-
-    @filter.command("高级货币", alias={"钻石", "星石"})
-    async def premium(self, event: AstrMessageEvent):
-        """查看你当前拥有的高级货币（钻石/星石）数量"""
-        async for r in inventory_handlers.premium(self, event):
             yield r
 
     # =========== 钓鱼与图鉴 ==========

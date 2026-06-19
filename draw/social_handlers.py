@@ -8,6 +8,7 @@ from .styles import (
     COLOR_GOLD, COLOR_RARE, COLOR_REFINE_RED, COLOR_REFINE_ORANGE,
     COLOR_CORNER, COLOR_SUCCESS, COLOR_ERROR, load_font
 )
+from .star_renderer import draw_text_with_stars
 
 def format_rarity_display(rarity: int) -> str:
     """格式化稀有度显示"""
@@ -161,7 +162,8 @@ async def _draw_steal_result_impl(steal_data: Dict[str, Any]) -> Image.Image:
                 rarity_color = text_secondary
 
             rarity_label = f"稀有度: {rarity_text}"
-            draw.text((50, current_y + 12), rarity_label, font=small_font, fill=rarity_color)
+            draw_text_with_stars(image, draw, (50, current_y + 12), rarity_label, 
+                                 font=small_font, fill=rarity_color, star_size=16)
 
             # 鱼名和品质
             info_y = current_y + 38

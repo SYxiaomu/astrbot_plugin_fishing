@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 from astrbot.api import logger
 from datetime import datetime
 
-from .utils import get_user_avatar, get_fish_icon
+from .utils import get_user_avatar, get_fish_icon, draw_user_card_bg
 from .styles import (
     IMG_WIDTH, PADDING, CORNER_RADIUS,
     COLOR_BACKGROUND, COLOR_HEADER_BG, COLOR_TEXT_WHITE, COLOR_TEXT_DARK,
@@ -24,7 +24,7 @@ def format_weight(g):
     return f"{g}g"
 
 # --- 布局 ---
-HEADER_HEIGHT = 120
+HEADER_HEIGHT = 180
 FISH_CARD_HEIGHT = 80   # 大幅减小高度以适应20个项目
 FISH_CARD_MARGIN = 8    # 减小间距
 FISH_PER_PAGE = 20      # 每页显示20个
@@ -94,12 +94,14 @@ async def draw_pokedex(pokedex_data: Dict[str, Any], user_info: Dict[str, Any], 
     card_bg = (255, 255, 255, 240)   # 高透明度白色
 
     # 绘制头部 - 使用背包风格
-    draw_rounded_rectangle(draw, (PADDING, PADDING, IMG_WIDTH - PADDING, PADDING + HEADER_HEIGHT), CORNER_RADIUS, fill=card_bg)
+    await draw_user_card_bg(img, draw, user_info.get('user_id', ''), data_dir,
+                            (PADDING, PADDING, IMG_WIDTH - PADDING, PADDING + HEADER_HEIGHT),
+                            CORNER_RADIUS, fallback_fill=card_bg)
     
     # 用户头像和标题区域
     avatar_size = 60
     header_x = PADDING + 30
-    header_y = PADDING + 30
+    header_y = PADDING + 45
     
     # 绘制用户头像 - 参考背包做法
     if data_dir and user_info.get('user_id'):
@@ -109,11 +111,11 @@ async def draw_pokedex(pokedex_data: Dict[str, Any], user_info: Dict[str, Any], 
     
     # 标题 - 使用背包颜色，调整到头像中间位置
     header_text = f"{user_info.get('nickname', '玩家')}的图鉴"
-    draw.text((header_x, header_y + 12), header_text, font=FONT_HEADER, fill=primary_dark)
+    draw.text((header_x, header_y + 18), header_text, font=FONT_HEADER, fill=primary_dark)
 
     # 进度 - 使用背包颜色
     progress_text = f"◇ 收集进度: {pokedex_data.get('unlocked_fish_count', 0)} / {pokedex_data.get('total_fish_count', 0)} ◇"
-    draw.text((IMG_WIDTH - PADDING - 300, PADDING + 45), progress_text, font=FONT_SUBHEADER, fill=primary_medium)
+    draw.text((IMG_WIDTH - PADDING - 300, PADDING + 68), progress_text, font=FONT_SUBHEADER, fill=primary_medium)
 
     # 绘制鱼卡片
     current_y = PADDING + HEADER_HEIGHT + FISH_CARD_MARGIN
@@ -161,7 +163,7 @@ async def draw_pokedex(pokedex_data: Dict[str, Any], user_info: Dict[str, Any], 
         # 重量纪录 - 使用更醒目的深金色
         min_w = fish.get('min_weight', 0)
         max_w = fish.get('max_weight', 0)
-        weight_text = f"● 重量纪录: 最小 {format_weight(min_w)} / 最大 {format_weight(max_w)}"
+        weight_text = f"★ 重量纪录: 最小 {format_weight(min_w)} / 最大 {format_weight(max_w)}"
         draw.text((stats_x, stats_y), weight_text, font=FONT_REGULAR, fill=(218, 165, 32))  # 深金色
         
         # 累计捕获 - 使用深蓝色

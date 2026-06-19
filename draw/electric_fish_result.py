@@ -8,6 +8,7 @@ from .styles import (
     COLOR_GOLD, COLOR_RARE, COLOR_REFINE_RED, COLOR_REFINE_ORANGE,
     COLOR_CORNER, COLOR_SUCCESS, COLOR_ERROR, load_font_with_emoji_fallback
 )
+from .star_renderer import draw_text_with_stars
 
 
 def format_rarity_display(rarity: int) -> str:
@@ -169,7 +170,8 @@ async def _draw_electric_fish_result_impl(electric_data: Dict[str, Any]) -> Imag
                 rarity_color = text_secondary
 
             rarity_label = f"稀有度: {format_rarity_display(rarity)}"
-            draw.text((cx, fy + 12), rarity_label, font=small_font, fill=rarity_color)
+            draw_text_with_stars(image, draw, (cx, fy + 12), rarity_label, 
+                                 font=small_font, fill=rarity_color, star_size=16)
 
             info_y = fy + 40
 
@@ -183,7 +185,7 @@ async def _draw_electric_fish_result_impl(electric_data: Dict[str, Any]) -> Imag
             fish_id = fish.get('fish_id', 0)
             value = fish.get('value', 0)
             fcode = f"F{fish_id}H" if quality_level == 1 else f"F{fish_id}"
-            quality_text = "高品质" if quality_level == 1 else "普通"
+            quality_text = "✨高品质" if quality_level == 1 else "普通"
             details = [
                 f"数量: {quantity}",
                 f"ID: {fcode}",

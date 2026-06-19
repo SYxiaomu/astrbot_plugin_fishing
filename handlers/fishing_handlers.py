@@ -101,35 +101,54 @@ class FishingHandlers:
             zones = zones_info["zones"]
             current_zone = next((z for z in zones if z["whether_in_use"]), None)
 
-            # 构建消息
-            message = "🗺️ **钓鱼区域列表**\n\n"
-            if current_zone:
-                message += f"📍 当前区域：{current_zone['name']}\n\n"
+            try:
+                from ..draw.fishing_area import draw_fishing_area_image
 
-            for zone in zones:
-                status_icon = "📍" if zone["whether_in_use"] else "⬜"
-                active_icon = "✅" if zone["is_active"] else "❌"
+                # 准备用户数据（带头像支持）
+                user_data = {
+                    'user_id': user_id,
+                    'nickname': user.nickname or user_id,
+                    'current_zone_name': current_zone['name'] if current_zone else '无',
+                }
 
-                message += f"{status_icon} {zone['zone_id']}. {zone['name']} {active_icon}\n"
-                message += f"   💰 钓鱼费用：{zone['fishing_cost']} 金币\n"
+                # 生成图片
+                image = await draw_fishing_area_image(zones, user_data, self.plugin.data_dir)
+                image_path = os.path.join(self.plugin.tmp_dir, "fishing_area.png")
+                image.save(image_path)
+                yield event.image_result(image_path)
+            except Exception as e:
+                from astrbot.api import logger
+                logger.error(f"生成钓鱼区域图片时发生错误: {e}", exc_info=True)
 
-                if zone["requires_pass"]:
-                    message += f"   🔑 需要通行证：{zone['required_item_name']}\n"
+                # 回退到文本消息
+                message = "🗺️**钓鱼区域列表**\n\n"
+                if current_zone:
+                    message += f"📍当前区域：{current_zone['name']}\n\n"
 
-                if zone["daily_rare_fish_quota"] > 0:
-                    remaining = zone["daily_rare_fish_quota"] - zone["rare_fish_caught_today"]
-                    message += f"   🐟 稀有鱼剩余：{remaining}/{zone['daily_rare_fish_quota']}\n"
+                for zone in zones:
+                    status_icon = "📍"if zone["whether_in_use"] else "⬜"
+                    active_icon = "✅"if zone["is_active"] else "❌"
 
-                if zone["available_from"]:
-                    message += f"   ⏰ 开放时间：{zone['available_from'].strftime('%m-%d %H:%M')}"
-                    if zone["available_until"]:
-                        message += f" ~ {zone['available_until'].strftime('%m-%d %H:%M')}"
+                    message += f"{status_icon} {zone['zone_id']}. {zone['name']} {active_icon}\n"
+                    message += f"   💰 钓鱼费用：{zone['fishing_cost']} 金币\n"
+
+                    if zone["requires_pass"]:
+                        message += f"   🔑 需要通行证：{zone['required_item_name']}\n"
+
+                    if zone["daily_rare_fish_quota"] > 0:
+                        remaining = zone["daily_rare_fish_quota"] - zone["rare_fish_caught_today"]
+                        message += f"   🐟 稀有鱼剩余：{remaining}/{zone['daily_rare_fish_quota']}\n"
+
+                    if zone["available_from"]:
+                        message += f"   ⏰ 开放时间：{zone['available_from'].strftime('%m-%d %H:%M')}"
+                        if zone["available_until"]:
+                            message += f" ~ {zone['available_until'].strftime('%m-%d %H:%M')}"
+                        message += "\n"
+
                     message += "\n"
 
-                message += "\n"
-
-            message += "💡 使用 /钓鱼区域 编号 切换到指定区域"
-            yield event.plain_result(message)
+                message += "💡 使用 /钓鱼区域 编号 切换到指定区域"
+                yield event.plain_result(message)
         else:
             # 有参数，尝试切换区域
             try:
@@ -196,7 +215,7 @@ class FishingHandlers:
                 'coins_modifier': coins_modifier
             }
 
-            image = await draw_fishing_result_image(fish_data, user_data)
+            image = await draw_fishing_result_image(fish_data, user_data, data_dir=self.plugin.data_dir)
             image_path = os.path.join(self.plugin.tmp_dir, "fishing_result.png")
             image.save(image_path)
             yield event.image_result(image_path)

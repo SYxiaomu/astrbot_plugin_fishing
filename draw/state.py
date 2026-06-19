@@ -6,12 +6,13 @@ import requests
 from io import BytesIO
 import time
 import json
-from .utils import get_user_avatar
+from .utils import get_user_avatar, draw_user_card_bg
 from .styles import (
     COLOR_SUCCESS, COLOR_WARNING, COLOR_ERROR, COLOR_GOLD, COLOR_RARE,
     COLOR_REFINE_RED, COLOR_REFINE_ORANGE, COLOR_CORNER, load_font
 )
 from .text_utils import load_font_with_cjk_fallback, draw_text_smart
+from .star_renderer import draw_text_with_stars
 
 def format_rarity_display(rarity: int) -> str:
     """格式化稀有度显示，支持显示到10星，10星以上显示为★★★★★★★★★★+"""
@@ -137,13 +138,13 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
 
     # 用户基本信息卡片
     current_y = title_y + title_h + 15
-    card_height = 85
+    card_height = 128
     card_margin = 15
     
     # 用户信息卡片
-    draw_rounded_rectangle(draw, 
-                         (card_margin, current_y, width - card_margin, current_y + card_height), 
-                         10, fill=card_bg)
+    await draw_user_card_bg(image, draw, user_data.get('user_id', ''), data_dir,
+                            (card_margin, current_y, width - card_margin, current_y + card_height),
+                            10, fallback_fill=card_bg)
     
     # 列位置
     col1_x_without_avatar = card_margin + 20  # 第一列
@@ -153,8 +154,8 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
     col2_x = col1_x + 240 # 第二列位置
     
     # 行位置
-    row1_y = current_y + 12
-    row2_y = current_y + 52
+    row1_y = current_y + 18
+    row2_y = current_y + 78
 
     # 绘制用户头像 - 如有
     if user_id := user_data.get('user_id'):
@@ -295,9 +296,10 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
         else:
             star_color = text_secondary
         
-        # 稀有度和精炼等级显示
+        # 稀有度和精炼等级显示（使用图片渲染★）
         rarity_refine_text = f"{format_rarity_display(rarity)} Lv.{refined_level}"
-        draw.text((left_col_x, equipment_row3_y), rarity_refine_text, font=tiny_font, fill=star_color)
+        draw_text_with_stars(image, draw, (left_col_x, equipment_row3_y), rarity_refine_text, 
+                             font=tiny_font, fill=star_color, star_size=14)
     else:
         draw.text((left_col_x, equipment_row2_y), "未装备", font=content_font, fill=text_muted)
 
@@ -321,7 +323,10 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
             star_color = warning_color
         else:
             star_color = text_secondary
-        draw.text((left_col_x, equipment_row6_y), f"{format_rarity_display(rarity)} Lv.{refined_level}", font=tiny_font, fill=star_color)
+        # 使用图片渲染★
+        accessory_rarity_text = f"{format_rarity_display(rarity)} Lv.{refined_level}"
+        draw_text_with_stars(image, draw, (left_col_x, equipment_row6_y), accessory_rarity_text, 
+                             font=tiny_font, fill=star_color, star_size=14)
     else:
         draw.text((left_col_x, equipment_row5_y), "未装备", font=content_font, fill=text_muted)
 
@@ -344,8 +349,10 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
         draw.text((right_col_x, equipment_row2_y), bait_name, font=content_font, fill=text_primary)
         rarity = current_bait.get('rarity', 1)
         star_color = rare_color if rarity > 4 else warning_color if rarity >= 3 else text_secondary
+        # 使用图片渲染★
         bait_detail = f"{format_rarity_display(rarity)} 剩余：{current_bait.get('quantity', 0)}"
-        draw.text((right_col_x, equipment_row3_y), bait_detail, font=tiny_font, fill=star_color)
+        draw_text_with_stars(image, draw, (right_col_x, equipment_row3_y), bait_detail, 
+                             font=tiny_font, fill=star_color, star_size=14)
     else:
         draw.text((right_col_x, equipment_row2_y), "未使用", font=content_font, fill=text_muted)
 

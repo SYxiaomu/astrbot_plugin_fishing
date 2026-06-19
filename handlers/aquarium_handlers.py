@@ -49,7 +49,7 @@ async def aquarium(self: "FishingPlugin", event: AstrMessageEvent):
         }
 
         # 生成图片
-        image = await draw_aquarium_image(aquarium_data, user_data)
+        image = await draw_aquarium_image(aquarium_data, user_data, data_dir=self.data_dir)
         image_path = os.path.join(self.tmp_dir, "aquarium.png")
         image.save(image_path)
         yield event.image_result(image_path)

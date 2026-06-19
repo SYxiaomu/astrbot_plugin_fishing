@@ -11,6 +11,7 @@ from .styles import (
     COLOR_ACCENT, COLOR_TEXT_GOLD, COLOR_TEXT_SILVER, COLOR_TEXT_BRONZE,
     COLOR_FISH_COUNT, COLOR_COINS, load_font
 )
+from .utils import draw_user_card_bg
 
 def draw_rounded_rectangle(draw, xy, radius=10, fill=None, outline=None, width=1):
     """绘制圆角矩形"""
@@ -71,7 +72,7 @@ def format_weight(grams):
 # --- 新增结束 ---
 
 
-def draw_fishing_ranking(user_data: List[Dict], output_path: str, ranking_type: str = "coins"):
+async def draw_fishing_ranking(user_data: List[Dict], output_path: str, ranking_type: str = "coins", data_dir: str = None):
     """
     绘制钓鱼排行榜图片
 
@@ -155,12 +156,14 @@ def draw_fishing_ranking(user_data: List[Dict], output_path: str, ranking_type: 
         # 绘制卡片背景
         card_y1 = current_y
         card_y2 = card_y1 + USER_CARD_HEIGHT
-        draw_rounded_rectangle(draw,
-                              (PADDING, card_y1, IMG_WIDTH - PADDING, card_y2),
-                              radius=10,
-                              fill=COLOR_CARD_BG,
-                              outline=COLOR_CARD_BORDER,
-                              width=2)
+        card_bbox = (PADDING, card_y1, IMG_WIDTH - PADDING, card_y2)
+        user_card_id = user.get("user_id", "")
+        if data_dir and user_card_id:
+            await draw_user_card_bg(img, draw, user_card_id, data_dir, card_bbox, radius=10, fallback_fill=COLOR_CARD_BG)
+            # 绘制边框
+            draw_rounded_rectangle(draw, card_bbox, radius=10, outline=COLOR_CARD_BORDER, width=2)
+        else:
+            draw_rounded_rectangle(draw, card_bbox, radius=10, fill=COLOR_CARD_BG, outline=COLOR_CARD_BORDER, width=2)
 
         # 绘制排名
         rank_x = PADDING + 15
@@ -176,7 +179,7 @@ def draw_fishing_ranking(user_data: List[Dict], output_path: str, ranking_type: 
 
         # 绘制用户名和称号
         name_x = PADDING + 70
-        name_y = card_y1 + 15
+        name_y = card_y1 + 22
         
         if len(nickname) > 12:
             nickname = nickname[:10] + "..."

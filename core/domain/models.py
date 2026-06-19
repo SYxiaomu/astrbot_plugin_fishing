@@ -254,6 +254,9 @@ class User:
     wipe_bomb_attempts_today: int = 0
     last_wipe_bomb_date: Optional[str] = None # YYYY-MM-DD 格式
 
+    # --- 新增：用户自定义卡片背景 ---
+    card_bg_path: Optional[str] = None  # 自定义卡片背景图路径
+
     def can_afford(self, cost: int) -> bool:
         """判断用户金币是否足够"""
         return self.coins >= cost
