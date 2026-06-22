@@ -9,11 +9,11 @@
 目前大部分文本输出已经改为图片（应该可以降低封号风险吧）  
 下一步打算搞个用户的网页端，支持直接在网页端操作（上班摸鱼）  
 本人部分AI率100%  
-![image](https://github.com/user-attachments/assets/1b1dea1e-8b68-408f-9a3f-c001ff95db0a)
+![image](https://github.com/user-attachments/assets/49bc50ed-73cc-4f90-8319-0f9390430ab0)
 
 ## 🖼️ 部分图片输出示例
 个人背景图可以自定义修改
-![image](https://github.com/user-attachments/assets/f4fdde65-308d-4b2c-8f26-6ad374815ba1)
+![image](https://github.com/user-attachments/assets/cbc9aeb7-2564-4837-a83c-78b2adf984e2)
 
 ## 🚀 最新更新 🚀
 
