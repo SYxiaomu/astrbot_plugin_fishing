@@ -12,6 +12,7 @@ from .styles import (
     FONT_HEADER, FONT_SUBHEADER, FONT_FISH_NAME, FONT_REGULAR, FONT_SMALL,
     COLOR_ACCENT, COLOR_SUCCESS, COLOR_WARNING, COLOR_GOLD, COLOR_RARE
 )
+from .star_renderer import draw_text_with_stars
 
 def format_weight(g):
     """将克转换为更易读的单位 (kg, t)"""
@@ -156,7 +157,8 @@ async def draw_pokedex(pokedex_data: Dict[str, Any], user_info: Dict[str, Any], 
             rarity_color = (220, 20, 60)  # 稀有红色
         else:
             rarity_color = COLOR_RARITY_MAP.get(rarity, text_secondary)
-        draw.text((left_pane_x, name_y + 25), rarity_text, font=FONT_FISH_NAME, fill=rarity_color)
+        draw_text_with_stars(img, draw, (left_pane_x, name_y + 25), rarity_text,
+                             font=FONT_FISH_NAME, fill=rarity_color, star_size=18)
         # 右侧统计信息 - 进一步向右移动
         stats_x = PADDING + 440
         stats_y = card_y1 + 15
@@ -164,7 +166,8 @@ async def draw_pokedex(pokedex_data: Dict[str, Any], user_info: Dict[str, Any], 
         min_w = fish.get('min_weight', 0)
         max_w = fish.get('max_weight', 0)
         weight_text = f"★ 重量纪录: 最小 {format_weight(min_w)} / 最大 {format_weight(max_w)}"
-        draw.text((stats_x, stats_y), weight_text, font=FONT_REGULAR, fill=(218, 165, 32))  # 深金色
+        draw_text_with_stars(img, draw, (stats_x, stats_y), weight_text,
+                             font=FONT_REGULAR, fill=(218, 165, 32), star_size=12)
         
         # 累计捕获 - 使用深蓝色
         total_w = fish.get('total_weight', 0)
@@ -177,7 +180,8 @@ async def draw_pokedex(pokedex_data: Dict[str, Any], user_info: Dict[str, Any], 
             first_caught_text = f"★ 首次捕获: {first_caught_time.strftime('%Y-%m-%d %H:%M')}"
         else:
             first_caught_text = f"★ 首次捕获: {str(first_caught_time).split('.')[0] if first_caught_time else '未知'}"
-        draw.text((stats_x, stats_y + 36), first_caught_text, font=FONT_REGULAR, fill=(46, 125, 50))  # 深绿色
+        draw_text_with_stars(img, draw, (stats_x, stats_y + 36), first_caught_text,
+                             font=FONT_REGULAR, fill=(46, 125, 50), star_size=12)
         # 描述 - 调整位置适应更小的卡片，使用背包颜色
         desc_y = card_y1 + FISH_CARD_HEIGHT - 20
         draw.text((left_pane_x, desc_y), fish.get("description", ""), font=FONT_SMALL, fill=text_muted)

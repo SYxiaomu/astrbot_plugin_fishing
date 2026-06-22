@@ -26,6 +26,8 @@ async def sign_in(self: "FishingPlugin", event: AstrMessageEvent):
     result = self.user_service.daily_sign_in(user_id)
     if result["success"]:
         yield event.plain_result(result["message"])
+    else:
+        yield event.plain_result(result["message"])
 
 async def state(self: "FishingPlugin", event: AstrMessageEvent):
     """查看用户状态"""

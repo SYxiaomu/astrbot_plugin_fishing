@@ -57,13 +57,12 @@ class GameMechanicsService:
     # --- 新增：命运之轮游戏内置配置 ---
     WHEEL_OF_FATE_CONFIG = {
         "min_entry_fee": 100,
-        "max_entry_fee": 1000000,
         "cooldown_seconds": 60,
         "timeout_seconds": 60,
         "levels": [
             { "level": 1, "success_rate": 0.65, "multiplier": 1.55 },  # 高风险起点，期望微盈利0.75%
-            { "level": 2, "success_rate": 0.60, "multiplier": 1.45 },  # 开始亏损，防止稳赚
-            { "level": 3, "success_rate": 0.55, "multiplier": 1.55 },  # 风险递增
+            { "level": 2, "success_rate": 0.60, "multiplier": 1.60 },  # 开始亏损，防止稳赚
+            { "level": 3, "success_rate": 0.55, "multiplier": 1.65 },  # 风险递增
             { "level": 4, "success_rate": 0.50, "multiplier": 1.70 },  # 中等风险
             { "level": 5, "success_rate": 0.45, "multiplier": 1.90 },  # 较高风险
             { "level": 6, "success_rate": 0.40, "multiplier": 2.15 },  # 高风险
@@ -513,8 +512,7 @@ class GameMechanicsService:
         # --- 限制逻辑结束 ---
 
         config = self.WHEEL_OF_FATE_CONFIG
-        min_fee = config.get("min_entry_fee", 500)
-        max_fee = config.get("max_entry_fee", 50000)
+        min_fee = config.get("min_entry_fee", 100)
         cooldown = config.get("cooldown_seconds", 60)
         now = get_now()
 
@@ -522,8 +520,8 @@ class GameMechanicsService:
             remaining = int(cooldown - (now - user.last_wof_play_time).total_seconds())
             return {"success": False, "message": f"[CQ:at,qq={user_id}] 命运之轮冷却中，请等待 {remaining} 秒后再试。"}
 
-        if not min_fee <= entry_fee <= max_fee:
-            return {"success": False, "message": f"[CQ:at,qq={user_id}] 入场费必须在 {min_fee} 到 {max_fee} 金币之间。"}
+        if entry_fee < min_fee:
+            return {"success": False, "message": f"[CQ:at,qq={user_id}] 入场费不能少于 {min_fee} 金币。"}
         if not user.can_afford(entry_fee):
             return {"success": False, "message": f"[CQ:at,qq={user_id}] 金币不足，当前拥有 {user.coins} 金币。"}
 

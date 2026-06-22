@@ -162,6 +162,9 @@ def _is_emoji_char(char: str) -> bool:
     # ✨ (U+2728) DouyinSansBold 不包含，需要回退到 emoji 字体
     if code == 0x2728:
         return True
+    # ◆ (U+25C6) ◇ (U+25C7) ◈ (U+25C8) DouyinSansBold 不包含，需要回退到 emoji 字体
+    if code in (0x25C6, 0x25C7, 0x25C8):
+        return True
     return False
 
 def _has_emoji(text: str) -> bool:

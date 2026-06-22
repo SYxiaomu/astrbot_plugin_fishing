@@ -187,7 +187,7 @@ async def draw_wheel_of_fate_help() -> Image.Image:
         ("", False),
         ("【玩法】", True),
         ("使用 /命运之轮 <金额> 开始游戏。", False),
-        ("(金额需在 500 - 50000 之间)", False),
+        ("(金额最低 100 金币，无上限)", False),
         ("", False),
         ("【规则】", True),
         ("游戏共10层，每层机器人都会提示你", False),

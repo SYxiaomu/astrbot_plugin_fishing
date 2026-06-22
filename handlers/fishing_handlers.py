@@ -2,7 +2,7 @@ import os
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api import logger
 from ..core.utils import get_now
-from ..utils import safe_datetime_handler, to_percentage, safe_get_file_path
+from ..utils import safe_datetime_handler, to_percentage, safe_get_file_path, format_rarity_display
 from ..draw.pokedex import draw_pokedex
 from typing import TYPE_CHECKING
 
@@ -76,6 +76,64 @@ class FishingHandlers:
             yield event.plain_result(result["message"])
         else:
             yield event.plain_result(result["message"])
+
+    async def fish_pokedex(self, event: AstrMessageEvent):
+        """查看鱼类图鉴"""
+        user_id = self.plugin._get_effective_user_id(event)
+        user = self.plugin.user_repo.get_by_id(user_id)
+        if not user:
+            yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+            return
+
+        # 解析页数参数
+        args = event.message_str.strip().split()
+        page = 1
+        if len(args) >= 2:
+            try:
+                page = int(args[1])
+                if page < 1:
+                    page = 1
+            except ValueError:
+                yield event.plain_result("❌ 页码格式错误！用法：/图鉴 [页码]")
+                return
+
+        # 获取图鉴数据
+        pokedex_data = self.fishing_service.get_user_pokedex(user_id)
+        if not pokedex_data.get("success", False):
+            yield event.plain_result(f"❌ {pokedex_data.get('message', '获取图鉴数据失败')}")
+            return
+
+        pokedex_list = pokedex_data.get("pokedex", [])
+        if not pokedex_list:
+            yield event.plain_result("🐟 您还没有钓到任何鱼，快去钓鱼吧！")
+            return
+
+        # 生成图鉴图片
+        try:
+            user_info = {
+                'user_id': user_id,
+                'nickname': user.nickname or user_id,
+            }
+            output_path = os.path.join(self.plugin.tmp_dir, "pokedex.png")
+            await draw_pokedex(pokedex_data, user_info, output_path, page=page, data_dir=self.plugin.data_dir)
+            yield event.image_result(output_path)
+        except Exception as e:
+            logger.error(f"生成图鉴图片时发生错误: {e}", exc_info=True)
+            # 回退到文本消息
+            message = "📖 **鱼类图鉴**\n\n"
+            total_fish = pokedex_data.get('total_fish_count', 0)
+            unlocked = pokedex_data.get('unlocked_fish_count', 0)
+            # 简单分页文本
+            FISH_PER_PAGE = 20
+            start_idx = (page - 1) * FISH_PER_PAGE
+            end_idx = start_idx + FISH_PER_PAGE
+            page_fishes = pokedex_list[start_idx:end_idx]
+            for fish in page_fishes:
+                message += f"- {fish['name']} ({format_rarity_display(fish['rarity'])})\n"
+            total_pages = (len(pokedex_list) + FISH_PER_PAGE - 1) // FISH_PER_PAGE
+            message += f"\n📊 收集进度: {unlocked}/{total_fish}\n"
+            message += f"◈ 第 {page}/{total_pages} 页 - 使用 /图鉴 [页码] 查看更多 ◈"
+            yield event.plain_result(message)
 
     async def fishing_area(self, event: AstrMessageEvent):
         """查看所有钓鱼区域和切换钓鱼区域。用法：钓鱼区域 [区域编号]"""

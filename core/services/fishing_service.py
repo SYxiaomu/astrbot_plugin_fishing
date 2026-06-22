@@ -706,7 +706,7 @@ class FishingService:
         return get_fish_template(fish_list, coins_chance)
 
     def _get_random_high_rarity(self, zone: FishingZone = None) -> int:
-        """从6星及以上鱼类中随机选择一个稀有度，兼容区域限定鱼"""
+        """从6星及以上鱼类中随机选择一个稀有度，按稀有度递减加权，兼容区域限定鱼"""
         # 检查是否有区域限定鱼
         specific_fish_ids = getattr(zone, 'specific_fish_ids', []) if zone else []
         
@@ -727,9 +727,15 @@ class FishingService:
         if not high_rarities:
             # 如果没有6星及以上的鱼，返回5星
             return 5
-            
-        # 从高稀有度中随机选择一个
-        return random.choice(list(high_rarities))
+        
+        # 按稀有度递减加权：稀有度越低（越接近6星）权重越高
+        # 权重 = max_r + 1 - rarity，例如 6→5, 7→4, 8→3, 9→2, 10→1
+        rarities = sorted(high_rarities)
+        max_r = max(rarities)
+        weights = [max_r + 1 - r for r in rarities]
+        
+        # 加权随机选择，高星稀有度被选中的概率更低
+        return random.choices(rarities, weights=weights, k=1)[0]
 
     def set_user_fishing_zone(self, user_id: str, zone_id: int) -> Dict[str, Any]:
         """
