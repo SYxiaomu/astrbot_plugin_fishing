@@ -1,6 +1,6 @@
+![:astrbot_plugin_fish](https://count.getloli.com/@:astrbot_plugin_fish?theme=capoo-1)
 
 <div align="center">
-![:astrbot_plugin_fish](https://count.getloli.com/@:astrbot_plugin_fish?theme=capoo-1)
 
 # 🎣 AstrBot 钓鱼插件
 
