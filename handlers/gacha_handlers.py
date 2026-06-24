@@ -24,7 +24,7 @@ def _get_field(obj, key, default=None):
 
 
 def _format_pool_details(pool, probabilities):
-    message = "【🎰 卡池详情】\n\n"
+    message = "【🎰卡池详情】\n\n"
     message += f"ID: {pool['gacha_pool_id']} - {pool['name']}\n"
     message += f"描述: {pool['description']}\n"
     # 限时开放信息展示（安全检查字段）
@@ -39,11 +39,11 @@ def _format_pool_details(pool, probabilities):
         message += f"花费: {pool['cost_premium_currency']} 高级货币 / 次\n\n"
     else:
         message += f"花费: {pool['cost_coins']} 金币 / 次\n\n"
-    message += "【📋 物品概率】\n"
+    message += "【📋物品概率】\n"
     if probabilities:
         for item in probabilities:
             message += (
-                f" - {'⭐' * item.get('item_rarity', 0)} {item['item_name']} "
+                f" - {'★' * item.get('item_rarity', 0)} {item['item_name']} "
                 f"(概率: {to_percentage(item['probability'])})\n"
             )
     return message
@@ -59,16 +59,16 @@ async def gacha(self: "FishingPlugin", event: AstrMessageEvent):
         if not pools:
             yield event.plain_result("❌ 当前没有可用的抽奖池。")
             return
-        message = "【🎰 抽奖池列表】\n\n"
+        message = "【🎰抽奖池列表】\n\n"
         for pool in pools.get("pools", []):
             cost_text = f"💰 金币 {pool['cost_coins']} / 次"
             if pool["cost_premium_currency"]:
                 cost_text = f"💎 高级货币 {pool['cost_premium_currency']} / 次"
             message += f"ID: {pool['gacha_pool_id']} - {pool['name']} - {pool['description']}\n {cost_text}\n\n"
         # 添加卡池详细信息
-        message += "【📋 卡池详情】使用「查看卡池 ID」命令查看详细物品概率\n"
-        message += "【🎲 抽卡命令】使用「抽卡 ID」命令选择抽卡池进行单次抽卡\n"
-        message += "【🎯 十连命令】使用「十连 ID [次数]」命令进行十连抽卡\n"
+        message += "【📋卡池详情】使用「查看卡池 ID」命令查看详细物品概率\n"
+        message += "【🎲抽卡命令】使用「抽卡 ID」命令选择抽卡池进行单次抽卡\n"
+        message += "【🎯十连命令】使用「十连 ID [次数]」命令进行十连抽卡\n"
         message += "   - 单次十连：/十连 1\n"
         message += "   - 多次十连：/十连 1 5 (进行5次十连，合并统计)"
         image = await draw_message_image(
@@ -93,7 +93,7 @@ async def gacha(self: "FishingPlugin", event: AstrMessageEvent):
                 pool_name = pool.name if pool else None
                 image = await draw_gacha_result(
                     items,
-                    title_text="🎰 抽卡结果",
+                    title_text="🎰抽卡结果",
                     user_id=user_id,
                     nickname=nickname,
                     data_dir=self.data_dir,
@@ -102,12 +102,12 @@ async def gacha(self: "FishingPlugin", event: AstrMessageEvent):
                 image_path = save_gacha_image(image, "gacha_result", self.data_dir)
                 yield event.image_result(image_path)
             except Exception:
-                message = f"🎉 抽卡成功！您抽到了 {len(items)} 件物品：\n"
+                message = f"🎉抽卡成功！您抽到了 {len(items)} 件物品：\n"
                 for item in items:
                     if item.get("type") == "coins":
                         message += f"⭐ {item['quantity']} 金币！\n"
                     else:
-                        message += f"{'⭐' * item.get('rarity', 1)} {item['name']}\n"
+                        message += f"{'★' * item.get('rarity', 1)} {item['name']}\n"
                 image = await draw_message_image(
                     message, title_text="🎰 抽卡结果",
                     user_id=user_id, nickname=nickname, data_dir=self.data_dir,
@@ -119,7 +119,7 @@ async def gacha(self: "FishingPlugin", event: AstrMessageEvent):
             user = self.user_repo.get_by_id(user_id)
             nickname = user.nickname if user and user.nickname else user_id
             image = await draw_message_image(
-                f"❌ 抽卡失败：{result['message']}", title_text="🎰 抽卡",
+                f"❌抽卡失败：{result['message']}", title_text="🎰 抽卡",
                 user_id=user_id, nickname=nickname, data_dir=self.data_dir,
                 status_type="error"
             )
@@ -189,7 +189,7 @@ async def ten_gacha(self: "FishingPlugin", event: AstrMessageEvent):
                     if item.get("type") == "coins":
                         message += f"⭐ {item['quantity']} 金币！\n"
                     else:
-                        message += f"{'⭐' * item.get('rarity', 1)} {item['name']}\n"
+                        message += f"{'★' * item.get('rarity', 1)} {item['name']}\n"
                 image = await draw_message_image(
                     message, title_text="🎰 十连结果",
                     user_id=user_id, nickname=nickname, data_dir=self.data_dir,
@@ -301,7 +301,7 @@ async def multi_ten_gacha(self: "FishingPlugin", event: AstrMessageEvent, pool_i
         for rarity in [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]:
             count = rarity_counts[rarity]
             if count > 0:
-                stars = "⭐" * rarity
+                stars = "★" * rarity
                 message += f"{stars} {count} 件\n"
         if coin_total > 0:
             message += f"\n💰 金币总计：{coin_total}\n"
@@ -360,7 +360,7 @@ async def gacha_history(self: "FishingPlugin", event: AstrMessageEvent):
             message = f"【📜 抽卡记录】共 {total_count} 条\n\n"
 
             for record in history:
-                message += f"物品名称: {record['item_name']} (稀有度: {'⭐' * record['rarity']})\n"
+                message += f"物品名称: {record['item_name']} (稀有度: {'★' * record['rarity']})\n"
                 message += f"时间: {safe_datetime_handler(record['timestamp'])}\n\n"
 
             image = await draw_message_image(

@@ -76,7 +76,7 @@ class FishingHandlers:
         nickname = user.nickname if user else user_id
         status = "success" if result["success"] else "error"
         image = await draw_message_image(
-            result["message"], title_text="🎣 自动钓鱼",
+            result["message"], title_text="🎣自动钓鱼",
             user_id=user_id, nickname=nickname, data_dir=self.plugin.data_dir,
             status_type=status
         )
@@ -226,7 +226,7 @@ class FishingHandlers:
             nickname = user.nickname if user else user_id
             status = "success" if result["success"] else "error"
             image = await draw_message_image(
-                result["message"], title_text="🗺️ 切换区域",
+                result["message"], title_text="🗺️切换区域",
                 user_id=user_id, nickname=nickname, data_dir=self.plugin.data_dir,
                 status_type=status
             )

@@ -159,6 +159,9 @@ def _is_emoji_char(char: str) -> bool:
     # ★☆ (U+2605/U+2606) DouyinSansBold 不包含，需要回退到 emoji 字体
     if code in (0x2605, 0x2606):
         return True
+    # ⭐ (U+2B50) 白五星，DouyinSansBold 不包含
+    if code == 0x2B50:
+        return True
     # ✨ (U+2728) DouyinSansBold 不包含，需要回退到 emoji 字体
     if code == 0x2728:
         return True

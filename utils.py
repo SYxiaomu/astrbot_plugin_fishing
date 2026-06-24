@@ -215,11 +215,11 @@ def to_percentage(value: float) -> str:
         return f"{(value - 1) * 100:.2f}%"
 
 def format_rarity_display(rarity: int) -> str:
-    """格式化稀有度显示，支持显示到10星，10星以上显示为⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐+"""
+    """格式化稀有度显示，支持显示到10星，10星以上显示为★★★★★★★★★★+"""
     if rarity <= 10:
-        return '⭐' * rarity
+        return '★' * rarity
     else:
-        return '⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐+'
+        return '★★★★★★★★★★+'
 
 def format_accessory_or_rod(accessory_or_rod: dict) -> str:
     """格式化配件信息"""

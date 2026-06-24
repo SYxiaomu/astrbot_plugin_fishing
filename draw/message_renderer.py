@@ -16,6 +16,7 @@ from .styles import (
     load_font, _is_emoji_char, _get_emoji_font
 )
 from .utils import get_user_avatar, draw_user_card_bg
+from .star_renderer import draw_text_with_stars
 
 
 # 统一边距
@@ -221,7 +222,13 @@ async def _draw_message_image_impl(
         wrapped = _wrap_text(line, content_font, max_text_width)
         for wl in wrapped:
             color = _get_line_color(wl, status_type)
-            draw.text((LEFT_MARGIN, current_y), wl, fill=color, font=content_font)
+            # 检测是否含有星号字符（★ 或 ⭐），使用星图渲染
+            if '★' in wl or '⭐' in wl:
+                wl_normalized = wl.replace('⭐', '★')
+                draw_text_with_stars(image, draw, (LEFT_MARGIN, current_y), wl_normalized,
+                                     font=content_font, fill=color, star_size=18)
+            else:
+                draw.text((LEFT_MARGIN, current_y), wl, fill=color, font=content_font)
             current_y += line_height
             if current_y > height - 25:
                 break
