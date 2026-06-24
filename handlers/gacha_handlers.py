@@ -1,13 +1,6 @@
 from astrbot.api.event import filter, AstrMessageEvent
 from ..utils import parse_target_user_id, to_percentage, safe_datetime_handler
-from ..draw.wheel_of_fate import (
-    draw_wheel_of_fate_start, draw_wheel_of_fate_result, draw_wheel_of_fate_help,
-    save_image_to_temp
-)
-from ..draw.wipe_bomb import (
-    draw_wipe_bomb_result, draw_wipe_bomb_history, draw_wipe_bomb_error,
-    save_image_to_temp as save_wb_image
-)
+from ..draw.message_renderer import draw_message_image, save_message_image
 from ..draw.gacha_detail import (
     draw_gacha_result, draw_multi_ten_gacha_result,
     save_image_to_temp as save_gacha_image
@@ -78,7 +71,12 @@ async def gacha(self: "FishingPlugin", event: AstrMessageEvent):
         message += "【🎯 十连命令】使用「十连 ID [次数]」命令进行十连抽卡\n"
         message += "   - 单次十连：/十连 1\n"
         message += "   - 多次十连：/十连 1 5 (进行5次十连，合并统计)"
-        yield event.plain_result(message)
+        image = await draw_message_image(
+            message, title_text="🎰 抽奖池列表",
+            status_type="info"
+        )
+        image_path = save_message_image(image, "gacha_pools", self.data_dir)
+        yield event.image_result(image_path)
         return
     pool_id = args[1]
     if not pool_id.isdigit():
@@ -110,9 +108,23 @@ async def gacha(self: "FishingPlugin", event: AstrMessageEvent):
                         message += f"⭐ {item['quantity']} 金币！\n"
                     else:
                         message += f"{'⭐' * item.get('rarity', 1)} {item['name']}\n"
-                yield event.plain_result(message)
+                image = await draw_message_image(
+                    message, title_text="🎰 抽卡结果",
+                    user_id=user_id, nickname=nickname, data_dir=self.data_dir,
+                    status_type="success"
+                )
+                image_path = save_message_image(image, "gacha_fb", self.data_dir)
+                yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"❌ 抽卡失败：{result['message']}")
+            user = self.user_repo.get_by_id(user_id)
+            nickname = user.nickname if user and user.nickname else user_id
+            image = await draw_message_image(
+                f"❌ 抽卡失败：{result['message']}", title_text="🎰 抽卡",
+                user_id=user_id, nickname=nickname, data_dir=self.data_dir,
+                status_type="error"
+            )
+            image_path = save_message_image(image, "gacha_err", self.data_dir)
+            yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -178,9 +190,23 @@ async def ten_gacha(self: "FishingPlugin", event: AstrMessageEvent):
                         message += f"⭐ {item['quantity']} 金币！\n"
                     else:
                         message += f"{'⭐' * item.get('rarity', 1)} {item['name']}\n"
-                yield event.plain_result(message)
+                image = await draw_message_image(
+                    message, title_text="🎰 十连结果",
+                    user_id=user_id, nickname=nickname, data_dir=self.data_dir,
+                    status_type="success"
+                )
+                image_path = save_message_image(image, "ten_gacha_fb", self.data_dir)
+                yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"❌ 抽卡失败：{result['message']}")
+            user = self.user_repo.get_by_id(user_id)
+            nickname = user.nickname if user and user.nickname else user_id
+            image = await draw_message_image(
+                f"❌ 抽卡失败：{result['message']}", title_text="🎰 十连",
+                user_id=user_id, nickname=nickname, data_dir=self.data_dir,
+                status_type="error"
+            )
+            image_path = save_message_image(image, "ten_gacha_err", self.data_dir)
+            yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -267,7 +293,7 @@ async def multi_ten_gacha(self: "FishingPlugin", event: AstrMessageEvent, pool_i
         image_path = save_gacha_image(image, "multi_ten_gacha", self.data_dir)
         yield event.image_result(image_path)
     except Exception:
-        # 回退：文本输出
+        # 回退：图片输出
         message = f"🎉 {times}次十连抽卡完成！共获得 {total_items} 件物品：\n\n"
         message += f"【💰 消耗统计】\n"
         message += f"消耗{cost_type}：{total_cost:,}{cost_unit}\n\n"
@@ -284,7 +310,13 @@ async def multi_ten_gacha(self: "FishingPlugin", event: AstrMessageEvent, pool_i
             sorted_items = sorted(item_counts.items())
             for item_name, count in sorted_items:
                 message += f"{item_name} × {count}\n"
-        yield event.plain_result(message)
+        image = await draw_message_image(
+            message, title_text=f"🎰 {times}次十连统计",
+            user_id=user_id, nickname=nickname, data_dir=self.data_dir,
+            status_type="success"
+        )
+        image_path = save_message_image(image, "multi_ten_fb", self.data_dir)
+        yield event.image_result(image_path)
 
 
 async def view_gacha_pool(self: "FishingPlugin", event: AstrMessageEvent):
@@ -302,7 +334,13 @@ async def view_gacha_pool(self: "FishingPlugin", event: AstrMessageEvent):
         if result["success"]:
             pool = result.get("pool", {})
             probabilities = result.get("probabilities", [])
-            yield event.plain_result(_format_pool_details(pool, probabilities))
+            image = await draw_message_image(
+                _format_pool_details(pool, probabilities),
+                title_text="🎰 卡池详情",
+                status_type="info"
+            )
+            image_path = save_message_image(image, "pool_detail", self.data_dir)
+            yield event.image_result(image_path)
         else:
             yield event.plain_result(f"❌ 查看卡池失败：{result['message']}")
     else:
@@ -325,236 +363,13 @@ async def gacha_history(self: "FishingPlugin", event: AstrMessageEvent):
                 message += f"物品名称: {record['item_name']} (稀有度: {'⭐' * record['rarity']})\n"
                 message += f"时间: {safe_datetime_handler(record['timestamp'])}\n\n"
 
-            yield event.plain_result(message)
+            image = await draw_message_image(
+                message, title_text="📜 抽卡记录",
+                status_type="info"
+            )
+            image_path = save_message_image(image, "gacha_history", self.data_dir)
+            yield event.image_result(image_path)
         else:
             yield event.plain_result(f"❌ 查看抽卡记录失败：{result['message']}")
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
-
-
-async def wipe_bomb(self: "FishingPlugin", event: AstrMessageEvent):
-    """擦弹功能"""
-    user_id = self._get_effective_user_id(event)
-    args = event.message_str.split(" ")
-    if len(args) < 2:
-        user = self.user_repo.get_by_id(user_id)
-        nickname = user.nickname if user and user.nickname else user_id
-        image = await draw_wipe_bomb_error("请指定要擦弹的金额，例如：/擦弹 1000", user_id, nickname, self.data_dir)
-        image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
-        yield event.image_result(image_path)
-        return
-    contribution_amount = args[1]
-    if contribution_amount in ["allin", "halfin", "梭哈", "梭一半"]:
-        # 查询用户当前金币数量
-        if user := self.user_repo.get_by_id(user_id):
-            coins = user.coins
-        else:
-            user = self.user_repo.get_by_id(user_id)
-            nickname = user.nickname if user and user.nickname else user_id
-            image = await draw_wipe_bomb_error("您还没有注册，请先使用 /注册 命令注册。", user_id, nickname, self.data_dir)
-            image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
-            yield event.image_result(image_path)
-            return
-        if contribution_amount in ("allin", "梭哈"):
-            contribution_amount = coins
-        elif contribution_amount in ("halfin", "梭一半"):
-            contribution_amount = coins // 2
-        contribution_amount = str(contribution_amount)
-    # 判断是否为int或数字字符串
-    if not contribution_amount.isdigit():
-        user = self.user_repo.get_by_id(user_id)
-        nickname = user.nickname if user and user.nickname else user_id
-        image = await draw_wipe_bomb_error("擦弹金额必须是数字，请检查后重试。", user_id, nickname, self.data_dir)
-        image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
-        yield event.image_result(image_path)
-        return
-    if result := self.game_mechanics_service.perform_wipe_bomb(
-        user_id, int(contribution_amount)
-    ):
-        if result["success"]:
-            user = self.user_repo.get_by_id(user_id)
-            nickname = user.nickname if user and user.nickname else user_id
-            image = await draw_wipe_bomb_result(
-                contribution=result["contribution"],
-                multiplier=result["multiplier"],
-                reward=result["reward"],
-                profit=result["profit"],
-                remaining_today=result["remaining_today"],
-                suppression_notice=result.get("suppression_notice", ""),
-                user_id=user_id,
-                nickname=nickname,
-                data_dir=self.data_dir
-            )
-            image_path = save_wb_image(image, "wipe_bomb_result", self.data_dir)
-            yield event.image_result(image_path)
-        else:
-            user = self.user_repo.get_by_id(user_id)
-            nickname = user.nickname if user and user.nickname else user_id
-            image = await draw_wipe_bomb_error(result['message'], user_id, nickname, self.data_dir)
-            image_path = save_wb_image(image, "wipe_bomb_fail", self.data_dir)
-            yield event.image_result(image_path)
-    else:
-        image = await draw_wipe_bomb_error("出错啦！请稍后再试。", user_id, None, self.data_dir)
-        image_path = save_wb_image(image, "wipe_bomb_error", self.data_dir)
-        yield event.image_result(image_path)
-
-
-async def wipe_bomb_history(self: "FishingPlugin", event: AstrMessageEvent):
-    """查看擦弹记录"""
-    user_id = self._get_effective_user_id(event)
-    user = self.user_repo.get_by_id(user_id)
-    nickname = user.nickname if user and user.nickname else user_id
-    if result := self.game_mechanics_service.get_wipe_bomb_history(user_id):
-        if result["success"]:
-            history = result.get("logs", [])
-            if not history:
-                image = await draw_wipe_bomb_error("您还没有擦弹记录。", user_id, nickname, self.data_dir)
-                image_path = save_wb_image(image, "wipe_bomb_history_empty", self.data_dir)
-                yield event.image_result(image_path)
-                return
-            # 格式化时间戳
-            for record in history:
-                ts = record.get('timestamp', '')
-                if hasattr(ts, 'strftime'):
-                    record['timestamp'] = ts.strftime("%Y-%m-%d %H:%M:%S")
-                else:
-                    record['timestamp'] = str(ts)[:19]
-            image = await draw_wipe_bomb_history(history, user_id, nickname, self.data_dir)
-            image_path = save_wb_image(image, "wipe_bomb_history", self.data_dir)
-            yield event.image_result(image_path)
-        else:
-            image = await draw_wipe_bomb_error(f"查看擦弹记录失败：{result['message']}", user_id, nickname, self.data_dir)
-            image_path = save_wb_image(image, "wipe_bomb_history_fail", self.data_dir)
-            yield event.image_result(image_path)
-    else:
-        image = await draw_wipe_bomb_error("出错啦！请稍后再试。", user_id, nickname, self.data_dir)
-        image_path = save_wb_image(image, "wipe_bomb_history_error", self.data_dir)
-        yield event.image_result(image_path)
-
-
-async def start_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
-    """处理开始命运之轮游戏的指令，并提供玩法说明。"""
-    user_id = self._get_effective_user_id(event)
-    args = event.message_str.split(" ")
-
-    if len(args) < 2:
-        # 生成帮助图片
-        image = await draw_wheel_of_fate_help()
-        image_path = save_image_to_temp(image, "wheel_help", self.data_dir)
-        yield event.image_result(image_path)
-        return
-
-    entry_fee_str = args[1]
-    if not entry_fee_str.isdigit():
-        yield event.plain_result("指令格式不正确哦！\n金额必须是纯数字。")
-        return
-
-    entry_fee = int(entry_fee_str)
-    result = self.game_mechanics_service.start_wheel_of_fate(user_id, entry_fee)
-    
-    if result and result.get("message"):
-        user = self.user_repo.get_by_id(user_id)
-        user_nickname = user.nickname if user and user.nickname else user_id
-        formatted_message = result["message"].replace(f"[CQ:at,qq={user_id}]", f"@{user_nickname}")
-        
-        # 生成结果图片
-        current_coins = user.coins if user else 0
-        if "入场费" in formatted_message or "余额不足" in formatted_message:
-            # 开始游戏失败（余额不足等）
-            image = await draw_wheel_of_fate_start(entry_fee, current_coins, user_id, user_nickname, self.data_dir)
-        else:
-            # 游戏进行中或成功
-            image = await draw_wheel_of_fate_result(formatted_message, user_nickname, user_id, self.data_dir)
-        
-        image_path = save_image_to_temp(image, "wheel_start", self.data_dir)
-        yield event.image_result(image_path)
-
-async def continue_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
-    """处理命运之轮的“继续”指令"""
-    user_id = self._get_effective_user_id(event)
-    # 直接将请求交给 Service 层，它会处理所有逻辑
-    result = self.game_mechanics_service.continue_wheel_of_fate(user_id)
-    if result and result.get("message"):
-        user = self.user_repo.get_by_id(user_id)
-        user_nickname = user.nickname if user and user.nickname else user_id
-        formatted_message = result["message"].replace(f"[CQ:at,qq={user_id}]", f"@{user_nickname}")
-        
-        # 生成结果图片
-        image = await draw_wheel_of_fate_result(formatted_message, user_nickname, user_id, self.data_dir)
-        image_path = save_image_to_temp(image, "wheel_continue", self.data_dir)
-        yield event.image_result(image_path)
-
-async def stop_wheel_of_fate(self: "FishingPlugin", event: AstrMessageEvent):
-    """处理命运之轮的“放弃”指令"""
-    user_id = self._get_effective_user_id(event)
-    # 直接将请求交给 Service 层，它会处理所有逻辑
-    result = self.game_mechanics_service.cash_out_wheel_of_fate(user_id)
-    if result and result.get("message"):
-        user = self.user_repo.get_by_id(user_id)
-        user_nickname = user.nickname if user and user.nickname else user_id
-        formatted_message = result["message"].replace(f"[CQ:at,qq={user_id}]", f"@{user_nickname}")
-        
-        # 生成结果图片
-        image = await draw_wheel_of_fate_result(formatted_message, user_nickname, user_id, self.data_dir)
-        image_path = save_image_to_temp(image, "wheel_stop", self.data_dir)
-        yield event.image_result(image_path)
-
-async def sicbo(self: "FishingPlugin", event: AstrMessageEvent):
-    """处理骰宝游戏指令"""
-    user_id = self._get_effective_user_id(event)
-    args = event.message_str.split(" ")
-
-    # 如果指令不完整，显示帮助信息
-    if len(args) < 3:
-        help_message = (
-            "--- 🎲 骰子 (押大小) 玩法说明 ---\n\n"
-            "【规则】\n"
-            "系统将投掷三颗骰子，你可以选总点数是“大”还是“小”。\n"
-            " - 🎯 小: 总点数 4 - 10\n"
-            " - 🎯 大: 总点数 11 - 17\n"
-            " - 🐅 豹子: 若三颗骰子点数相同 (例如 都在)，则庄家赢！\n"
-            "奖金均为 1:1。\n\n"
-            "【指令格式】\n"
-            "`/骰子 <大或小> <金币>`\n"
-            "例如: `/骰子 大 1000`"
-        )
-        yield event.plain_result(help_message)
-        return
-
-    bet_type = args[1]
-    amount_str = args[2]
-
-    if not amount_str.isdigit():
-        yield event.plain_result("❌ 押注金额必须是纯数字！")
-        return
-    
-    amount = int(amount_str)
-
-    # 调用核心服务逻辑
-    result = self.game_mechanics_service.play_sicbo(user_id, bet_type, amount)
-
-    # 根据服务返回的结果，构建回复消息
-    if not result["success"]:
-        yield event.plain_result(result["message"])
-        return
-
-    dice_emojis = {1: '⚀', 2: '⚁', 3: '⚂', 4: '⚃', 5: '⚄', 6: '⚅'}
-    dice_str = " ".join([dice_emojis.get(d, str(d)) for d in result["dice"]])
-    
-    message = f"🎲 开奖结果: {dice_str}  (总点数: {result['total']})\n"
-    
-    if result["is_triple"]:
-        message += f"🐅 开出豹子！庄家通吃！\n"
-    else:
-        message += f"🎯 判定结果为: {result['result_type']}\n"
-
-    if result["win"]:
-        message += f"🎉 恭喜你，猜中了！\n"
-        message += f"💰 你赢得了 {result['profit']:,} 金币！"
-    else:
-        message += f"😔 很遗憾，没猜中。\n"
-        message += f"💸 你失去了 {abs(result['profit']):,} 金币。"
-
-    message += f"\n余额: {result['new_balance']:,} 金币"
-    
-    yield event.plain_result(message)

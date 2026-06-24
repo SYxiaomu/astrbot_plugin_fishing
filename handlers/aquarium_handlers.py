@@ -2,6 +2,7 @@ import os
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api import logger
 from ..utils import format_rarity_display
+from ..draw.message_renderer import draw_message_image, save_message_image
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -124,10 +125,16 @@ async def add_to_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
 
     result = self.aquarium_service.add_fish_to_aquarium(user_id, fish_id, quantity, quality_level)
     
-    if result["success"]:
-        yield event.plain_result(f"✅ {result['message']}")
-    else:
-        yield event.plain_result(f"❌ {result['message']}")
+    user = self.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
+    status = "success" if result["success"] else "error"
+    image = await draw_message_image(
+        result["message"], title_text="🐠 放入水族箱",
+        user_id=user_id, nickname=nickname, data_dir=self.data_dir,
+        status_type=status
+    )
+    image_path = save_message_image(image, "add_aquarium", self.data_dir)
+    yield event.image_result(image_path)
 
 
 async def remove_from_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
@@ -167,10 +174,16 @@ async def remove_from_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
 
     result = self.aquarium_service.remove_fish_from_aquarium(user_id, fish_id, quantity, quality_level)
     
-    if result["success"]:
-        yield event.plain_result(f"✅ {result['message']}")
-    else:
-        yield event.plain_result(f"❌ {result['message']}")
+    user = self.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
+    status = "success" if result["success"] else "error"
+    image = await draw_message_image(
+        result["message"], title_text="🐠 移出水族箱",
+        user_id=user_id, nickname=nickname, data_dir=self.data_dir,
+        status_type=status
+    )
+    image_path = save_message_image(image, "remove_aquarium", self.data_dir)
+    yield event.image_result(image_path)
 
 
 async def upgrade_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
@@ -180,10 +193,16 @@ async def upgrade_aquarium(self: "FishingPlugin", event: AstrMessageEvent):
     # 直接尝试升级，失败时会返回具体原因（包含所需费用）
     result = self.aquarium_service.upgrade_aquarium(user_id)
     
-    if result["success"]:
-        yield event.plain_result(f"✅ {result['message']}")
-    else:
-        yield event.plain_result(f"❌ {result['message']}")
+    user = self.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
+    status = "success" if result["success"] else "error"
+    image = await draw_message_image(
+        result["message"], title_text="🐠 升级水族箱",
+        user_id=user_id, nickname=nickname, data_dir=self.data_dir,
+        status_type=status
+    )
+    image_path = save_message_image(image, "upgrade_aquarium", self.data_dir)
+    yield event.image_result(image_path)
 
     # 过度信息命令删除：在升级操作中按需提示
 
@@ -206,4 +225,9 @@ async def aquarium_help(self: "FishingPlugin", event: AstrMessageEvent):
 
 💡 提示：使用「水族箱」命令查看鱼ID"""
     
-    yield event.plain_result(message)
+    image = await draw_message_image(
+        message, title_text="🐠 水族箱帮助",
+        status_type="info"
+    )
+    image_path = save_message_image(image, "aquarium_help", self.data_dir)
+    yield event.image_result(image_path)

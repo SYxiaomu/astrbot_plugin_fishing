@@ -5,6 +5,7 @@ from astrbot.core.message.components import At
 from astrbot.api import logger
 from ..utils import parse_target_user_id, parse_amount, sanitize_filename
 from ..draw.rank import draw_fishing_ranking
+from ..draw.message_renderer import draw_message_image, save_message_image
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -296,13 +297,29 @@ async def dispel_protection(plugin: "FishingPlugin", event: AstrMessageEvent):
     
     # 尝试驱散
     result = plugin.game_mechanics_service.dispel_steal_protection(target_id)
+
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     
     if result.get("success"):
         # 成功驱散，消耗道具
         plugin.inventory_repo.decrease_item_quantity(user_id, dispel_item.item_id, 1)
-        yield event.plain_result(f"✅ 使用了【{dispel_item.name}】！{result['message']}")
+        msg = f"✅ 使用了【{dispel_item.name}】！{result['message']}"
+        image = await draw_message_image(
+            msg, title_text="🕯️ 驱灵香",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="success"
+        )
+        image_path = save_message_image(image, "dispel", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result(result["message"])
+        image = await draw_message_image(
+            result["message"], title_text="🕯️ 驱灵香",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="error"
+        )
+        image_path = save_message_image(image, "dispel", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def view_titles(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -365,8 +382,17 @@ async def use_title(plugin: "FishingPlugin", event: AstrMessageEvent):
     if not title_id_str.isdigit():
         yield event.plain_result("❌ 称号 ID 必须是数字，请检查后重试。")
         return
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     result = plugin.user_service.use_title(user_id, int(title_id_str))
-    yield event.plain_result(result["message"])
+    status = "success" if result.get("success", False) else "error"
+    image = await draw_message_image(
+        result["message"], title_text="🏅 使用称号",
+        user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+        status_type=status
+    )
+    image_path = save_message_image(image, "use_title", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def view_achievements(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -433,17 +459,41 @@ async def tax_record(plugin: "FishingPlugin", event: AstrMessageEvent):
     from ..utils import safe_datetime_handler
 
     user_id = plugin._get_effective_user_id(event)
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     result = plugin.user_service.get_tax_record(user_id)
     if result and result["success"]:
         records = result.get("records", [])
         if not records:
-            yield event.plain_result("📜 您还没有税收记录。")
+            image = await draw_message_image(
+                "📜 您还没有税收记录。",
+                title_text="📜 税收记录",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="info"
+            )
+            image_path = save_message_image(image, "tax_empty", plugin.data_dir)
+            yield event.image_result(image_path)
             return
-        message = "【📜 税收记录】\n\n"
-        for record in records:
-            message += f"⏱️ 时间: {safe_datetime_handler(record['timestamp'])}\n"
-            message += f"💰 金额: {record['amount']} 金币\n"
-            message += f"📊 描述: {record['tax_type']}\n\n"
-        yield event.plain_result(message)
+        message_lines = []
+        for record in records[:20]:
+            message_lines.append(
+                f"⏱️ {safe_datetime_handler(record['timestamp'])} \n💰 {record['amount']} 金币\n📊 {record['tax_type']}"
+            )
+        msg = "\n\n".join(message_lines)
+        if len(records) > 20:
+            msg += f"\n\n... 还有 {len(records) - 20} 条记录"
+        image = await draw_message_image(
+            msg,
+            title_text=f"📜 税收记录 (共{len(records)}条)",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="info"
+        )
+        image_path = save_message_image(image, "tax_record", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result(f"❌ 查看税收记录失败：{result.get('message', '未知错误')}")
+        image = await draw_message_image(
+            f"❌ 查看税收记录失败：{result.get('message', '未知错误')}",
+            title_text="📜 税收记录", status_type="error"
+        )
+        image_path = save_message_image(image, "tax_err", plugin.data_dir)
+        yield event.image_result(image_path)

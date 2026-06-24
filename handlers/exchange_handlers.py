@@ -1,6 +1,7 @@
 from astrbot.api.event import AstrMessageEvent
 from typing import Optional, Dict, Any, TYPE_CHECKING, List
 from datetime import datetime, timedelta
+from ..draw.message_renderer import draw_message_image, save_message_image
 
 if TYPE_CHECKING:
     from ..main import FishingPlugin
@@ -323,7 +324,12 @@ class ExchangeHandlers:
         msg += "═" * 30 + "\n"
         msg += "💡 用法：交易所 历史 [商品] [天数]；最多30天。"
 
-        yield event.plain_result(msg)
+        image = await draw_message_image(
+            msg, title_text="📈 价格历史",
+            status_type="info"
+        )
+        image_path = save_message_image(image, "price_history", self.plugin.data_dir)
+        yield event.image_result(image_path)
 
     async def _view_market_analysis(self, event: AstrMessageEvent):
         """市场分析：
@@ -464,7 +470,12 @@ class ExchangeHandlers:
         msg += "💡 提示：指标仅供参考，注意风险控制。\n"
         msg += "用法: 交易所 分析 [商品] [天数]"
 
-        yield event.plain_result(msg)
+        image = await draw_message_image(
+            msg, title_text="📊 市场分析",
+            status_type="info"
+        )
+        image_path = save_message_image(image, "market_analysis", self.plugin.data_dir)
+        yield event.image_result(image_path)
 
     async def exchange_main(self, event: AstrMessageEvent):
         """交易所主命令，根据参数分发到不同功能"""
@@ -486,7 +497,12 @@ class ExchangeHandlers:
                 async for r in self.sell_commodity(event):
                     yield r
             elif command in ["帮助", "help"]:
-                yield event.plain_result(self._get_exchange_help())
+                image = await draw_message_image(
+                    self._get_exchange_help(), title_text="📈 交易所帮助",
+                    status_type="info"
+                )
+                image_path = save_message_image(image, "exchange_help", self.plugin.data_dir)
+                yield event.image_result(image_path)
             elif command in ["历史", "history"]:
                 async for r in self._view_price_history(event):
                     yield r
@@ -494,14 +510,22 @@ class ExchangeHandlers:
                 async for r in self._view_market_analysis(event):
                     yield r
             elif command in ["统计", "stats"]:
-                yield event.plain_result(self._get_trading_stats_help())
+                image = await draw_message_image(
+                    self._get_trading_stats_help(), title_text="📈 交易统计",
+                    status_type="info"
+                )
+                image_path = save_message_image(image, "trade_stats", self.plugin.data_dir)
+                yield event.image_result(image_path)
             elif command in ["状态", "status"]:
                 async for r in self.exchange_status(event):
                     yield r
             else:
-                yield event.plain_result(
-                    "❌ 未知命令。使用【交易所 帮助】查看可用命令。"
+                image = await draw_message_image(
+                    "❌ 未知命令。使用【交易所 帮助】查看可用命令。",
+                    title_text="❌ 错误", status_type="error"
                 )
+                image_path = save_message_image(image, "exchange_unknown", self.plugin.data_dir)
+                yield event.image_result(image_path)
 
     def _get_exchange_help(self) -> str:
         """获取交易所帮助信息"""
@@ -704,21 +728,37 @@ class ExchangeHandlers:
             msg += "═" * 30 + "\n"
             msg += "💡 使用【交易所 帮助】查看更多命令。"
 
-            yield event.plain_result(msg)
+            image = await draw_message_image(
+                msg, title_text="📈 交易所行情",
+                user_id=user_id, nickname=user.nickname if user else user_id,
+                data_dir=self.plugin.data_dir, status_type="info"
+            )
+            image_path = save_message_image(image, "exchange_status", self.plugin.data_dir)
+            yield event.image_result(image_path)
         except Exception as e:
             from astrbot.api import logger
             logger.error(f"交易所状态查询失败: {e}")
-            yield event.plain_result(f"❌ 查询失败: {str(e)}")
+            image = await draw_message_image(
+                f"❌ 查询失败: {str(e)}", title_text="❌ 错误",
+                status_type="error"
+            )
+            image_path = save_message_image(image, "exchange_err", self.plugin.data_dir)
+            yield event.image_result(image_path)
 
     async def open_exchange_account(self, event: AstrMessageEvent):
         """开通交易所账户"""
         user_id = self._get_effective_user_id(event)
         result = self.exchange_service.open_exchange_account(user_id)
-        yield event.plain_result(
-            f"✅ {result['message']}"
-            if result["success"]
-            else f"❌ {result['message']}"
+        user = self.plugin.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user else user_id
+        status = "success" if result["success"] else "error"
+        image = await draw_message_image(
+            result["message"], title_text="📈 开户",
+            user_id=user_id, nickname=nickname,
+            data_dir=self.plugin.data_dir, status_type=status
         )
+        image_path = save_message_image(image, "open_account", self.plugin.data_dir)
+        yield event.image_result(image_path)
 
     async def view_inventory(self, event: AstrMessageEvent):
         """查看大宗商品库存"""
@@ -729,12 +769,22 @@ class ExchangeHandlers:
 
             result = self.exchange_service.get_user_inventory(user_id)
             if not result["success"]:
-                yield event.plain_result(f"❌ {result.get('message', '查询失败')}")
+                image = await draw_message_image(
+                    f"❌ {result.get('message', '查询失败')}", title_text="❌ 错误",
+                    status_type="error"
+                )
+                image_path = save_message_image(image, "inventory_err", self.plugin.data_dir)
+                yield event.image_result(image_path)
                 return
 
             inventory = result["inventory"]
             if not inventory:
-                yield event.plain_result("您的交易所库存为空。")
+                image = await draw_message_image(
+                    "您的交易所库存为空。", title_text="📦 交易所库存",
+                    status_type="info"
+                )
+                image_path = save_message_image(image, "inventory_empty", self.plugin.data_dir)
+                yield event.image_result(image_path)
                 return
 
             market_status = self.exchange_service.get_market_status()
@@ -837,13 +887,26 @@ class ExchangeHandlers:
             )
             msg += f"📦 当前持仓: {current_total_quantity} / {capacity}\n"
 
-            yield event.plain_result(msg)
+            user = self.plugin.user_repo.get_by_id(user_id)
+            nickname = user.nickname if user else user_id
+            image = await draw_message_image(
+                msg, title_text="📦 我的持仓",
+                user_id=user_id, nickname=nickname,
+                data_dir=self.plugin.data_dir, status_type="info"
+            )
+            image_path = save_message_image(image, "inventory", self.plugin.data_dir)
+            yield event.image_result(image_path)
 
         except Exception as e:
             from astrbot.api import logger
 
             logger.error(f"持仓命令执行失败: {e}")
-            yield event.plain_result(f"❌ 持仓命令执行失败: {e}")
+            image = await draw_message_image(
+                f"❌ 持仓命令执行失败: {e}", title_text="❌ 错误",
+                status_type="error"
+            )
+            image_path = save_message_image(image, "inventory_exc", self.plugin.data_dir)
+            yield event.image_result(image_path)
 
     async def buy_commodity(self, event: AstrMessageEvent):
         """购买大宗商品"""
@@ -891,11 +954,16 @@ class ExchangeHandlers:
         result = self.exchange_service.purchase_commodity(
             user_id, commodity_id, quantity, current_price
         )
-        yield event.plain_result(
-            f"✅ {result['message']}"
-            if result["success"]
-            else f"❌ {result['message']}"
+        user = self.plugin.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user else user_id
+        status = "success" if result["success"] else "error"
+        image = await draw_message_image(
+            result["message"], title_text="📈 买入",
+            user_id=user_id, nickname=nickname,
+            data_dir=self.plugin.data_dir, status_type=status
         )
+        image_path = save_message_image(image, "buy_commodity", self.plugin.data_dir)
+        yield event.image_result(image_path)
 
     async def sell_commodity(self, event: AstrMessageEvent):
         """卖出大宗商品"""

@@ -76,8 +76,6 @@ class AchievementService:
             user=user,
             unique_fish_count=self.achievement_repo.get_user_unique_fish_count(user_id),
             garbage_count=self.achievement_repo.get_user_garbage_count(user_id),
-            max_wipe_bomb_multiplier=user.max_wipe_bomb_multiplier, # <--- 采用优化后的实现
-            min_wipe_bomb_multiplier=user.min_wipe_bomb_multiplier, # <--- 采用优化后的实现
             owned_rod_rarities=owned_rod_rarities,
             owned_accessory_rarities=owned_accessory_rarities,
             has_heavy_fish=self.achievement_repo.has_caught_heavy_fish(user_id, 100000)

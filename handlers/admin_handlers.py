@@ -8,6 +8,7 @@ from astrbot.core.star.filter.permission import PermissionType
 from astrbot.api.message_components import At, Node, Plain
 
 from ..utils import parse_target_user_id, _is_port_available, parse_amount
+from ..draw.message_renderer import draw_message_image, save_message_image
 from ..manager.server import create_app
 from typing import TYPE_CHECKING
 
@@ -38,9 +39,12 @@ async def modify_coins(plugin: "FishingPlugin", event: AstrMessageEvent):
         return
 
     if result := plugin.user_service.modify_user_coins(target_user_id, int(coins)):
-        yield event.plain_result(
-            f"✅ 成功修改用户 {target_user_id} 的金币数量为 {coins} 金币"
+        image = await draw_message_image(
+            f"✅ 成功修改用户 {target_user_id} 的金币数量为 {coins} 金币",
+            title_text="💰 修改金币", status_type="success"
         )
+        image_path = save_message_image(image, "modify_coins", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -73,7 +77,12 @@ async def modify_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
         return
     user.premium_currency = int(premium)
     plugin.user_repo.update(user)
-    yield event.plain_result(f"✅ 成功修改用户 {target_user_id} 的高级货币为 {premium}")
+    image = await draw_message_image(
+        f"✅ 成功修改用户 {target_user_id} 的高级货币为 {premium}",
+        title_text="💎 修改高级货币", status_type="success"
+    )
+    image_path = save_message_image(image, "modify_premium", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def reward_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -104,7 +113,12 @@ async def reward_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
         return
     user.premium_currency += int(premium)
     plugin.user_repo.update(user)
-    yield event.plain_result(f"✅ 成功给用户 {target_user_id} 奖励 {premium} 高级货币")
+    image = await draw_message_image(
+        f"✅ 成功给用户 {target_user_id} 奖励 {premium} 高级货币",
+        title_text="💎 奖励高级货币", status_type="success"
+    )
+    image_path = save_message_image(image, "reward_premium", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def deduct_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -138,7 +152,12 @@ async def deduct_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
         return
     user.premium_currency -= int(premium)
     plugin.user_repo.update(user)
-    yield event.plain_result(f"✅ 成功扣除用户 {target_user_id} 的 {premium} 高级货币")
+    image = await draw_message_image(
+        f"✅ 成功扣除用户 {target_user_id} 的 {premium} 高级货币",
+        title_text="💎 扣除高级货币", status_type="success"
+    )
+    image_path = save_message_image(image, "deduct_premium", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def reward_all_coins(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -168,7 +187,12 @@ async def reward_all_coins(plugin: "FishingPlugin", event: AstrMessageEvent):
         user.coins += amount_int
         plugin.user_repo.update(user)
         updated += 1
-    yield event.plain_result(f"✅ 已向 {updated} 位用户每人发放 {amount_int} 金币")
+    image = await draw_message_image(
+        f"✅ 已向 {updated} 位用户每人发放 {amount_int} 金币",
+        title_text="💰 全体奖励金币", status_type="success"
+    )
+    image_path = save_message_image(image, "reward_all_coins", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def reward_all_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -196,7 +220,12 @@ async def reward_all_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
         user.premium_currency += amount_int
         plugin.user_repo.update(user)
         updated += 1
-    yield event.plain_result(f"✅ 已向 {updated} 位用户每人发放 {amount_int} 高级货币")
+    image = await draw_message_image(
+        f"✅ 已向 {updated} 位用户每人发放 {amount_int} 高级货币",
+        title_text="💎 全体奖励高级货币", status_type="success"
+    )
+    image_path = save_message_image(image, "reward_all_premium", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def deduct_all_coins(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -229,9 +258,12 @@ async def deduct_all_coins(plugin: "FishingPlugin", event: AstrMessageEvent):
         plugin.user_repo.update(user)
         affected += 1
         total_deducted += deduct
-    yield event.plain_result(
-        f"✅ 已从 {affected} 位用户总计扣除 {total_deducted} 金币（每人至多 {amount_int}）"
+    image = await draw_message_image(
+        f"✅ 已从 {affected} 位用户总计扣除 {total_deducted} 金币（每人至多 {amount_int}）",
+        title_text="💰 全体扣除金币", status_type="success"
     )
+    image_path = save_message_image(image, "deduct_all_coins", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def deduct_all_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -266,9 +298,12 @@ async def deduct_all_premium(plugin: "FishingPlugin", event: AstrMessageEvent):
         plugin.user_repo.update(user)
         affected += 1
         total_deducted += deduct
-    yield event.plain_result(
-        f"✅ 已从 {affected} 位用户总计扣除 {total_deducted} 高级货币（每人至多 {amount_int}）"
+    image = await draw_message_image(
+        f"✅ 已从 {affected} 位用户总计扣除 {total_deducted} 高级货币（每人至多 {amount_int}）",
+        title_text="💎 全体扣除高级货币", status_type="success"
     )
+    image_path = save_message_image(image, "deduct_all_premium", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def reward_coins(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -303,7 +338,12 @@ async def reward_coins(plugin: "FishingPlugin", event: AstrMessageEvent):
     if result := plugin.user_service.modify_user_coins(
         target_user_id, int(current_coins.get("coins") + coins)
     ):
-        yield event.plain_result(f"✅ 成功给用户 {target_user_id} 奖励 {coins} 金币")
+        image = await draw_message_image(
+            f"✅ 成功给用户 {target_user_id} 奖励 {coins} 金币",
+            title_text="💰 奖励金币", status_type="success"
+        )
+        image_path = save_message_image(image, "reward_coins", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -339,7 +379,12 @@ async def deduct_coins(plugin: "FishingPlugin", event: AstrMessageEvent):
     if result := plugin.user_service.modify_user_coins(
         target_user_id, int(current_coins.get("coins") - int(coins))
     ):
-        yield event.plain_result(f"✅ 成功扣除用户 {target_user_id} 的 {coins} 金币")
+        image = await draw_message_image(
+            f"✅ 成功扣除用户 {target_user_id} 的 {coins} 金币",
+            title_text="💰 扣除金币", status_type="success"
+        )
+        image_path = save_message_image(image, "deduct_coins", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -378,12 +423,20 @@ async def start_admin(plugin: "FishingPlugin", event: AstrMessageEvent):
 
         await asyncio.sleep(1)  # 等待服务启动
 
-        yield event.plain_result(
-            f"✅ 钓鱼后台已启动！\n🔗请访问 http://localhost:{plugin.port}/admin\n🔑 密钥请到配置文件中查看\n\n⚠️ 重要提示：\n• 如需公网访问，请自行配置端口转发和防火墙规则\n• 确保端口 {plugin.port} 已开放并映射到公网IP\n• 建议使用反向代理（如Nginx）增强安全性"
+        image = await draw_message_image(
+            f"✅ 钓鱼后台已启动！\n🔗 访问地址：http://localhost:{plugin.port}/admin\n🔑 密钥请到配置文件中查看\n\n⚠️ 重要提示：\n• 如需公网访问，请自行配置端口转发和防火墙规则\n• 确保端口 {plugin.port} 已开放并映射到公网IP\n• 建议使用反向代理（如Nginx）增强安全性",
+            title_text="🌐 启动管理后台", status_type="success"
         )
+        image_path = save_message_image(image, "start_admin", plugin.data_dir)
+        yield event.image_result(image_path)
     except Exception as e:
         logger.error(f"启动后台失败: {e}", exc_info=True)
-        yield event.plain_result(f"❌ 启动后台失败: {e}")
+        image = await draw_message_image(
+            f"❌ 启动后台失败: {e}",
+            title_text="🌐 启动管理后台", status_type="error"
+        )
+        image_path = save_message_image(image, "start_admin", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def stop_admin(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -404,21 +457,41 @@ async def stop_admin(plugin: "FishingPlugin", event: AstrMessageEvent):
     except asyncio.CancelledError:
         # 3. 捕获CancelledError，这是成功关闭的标志
         logger.info("钓鱼插件Web管理后台已成功关闭")
-        yield event.plain_result("✅ 钓鱼后台已关闭")
+        image = await draw_message_image(
+            "✅ 钓鱼后台已关闭",
+            title_text="🌐 关闭管理后台", status_type="success"
+        )
+        image_path = save_message_image(image, "stop_admin", plugin.data_dir)
+        yield event.image_result(image_path)
     except Exception as e:
         # 4. 捕获其他可能的意外错误
         logger.error(f"关闭钓鱼后台管理时发生意外错误: {e}", exc_info=True)
-        yield event.plain_result(f"❌ 关闭钓鱼后台管理失败: {e}")
+        image = await draw_message_image(
+            f"❌ 关闭钓鱼后台管理失败: {e}",
+            title_text="🌐 关闭管理后台", status_type="error"
+        )
+        image_path = save_message_image(image, "stop_admin", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def sync_initial_data(plugin: "FishingPlugin", event: AstrMessageEvent):
     """从 initial_data.py 同步所有初始设定（道具、商店等）。"""
     try:
         plugin.data_setup_service.sync_all_initial_data()
-        yield event.plain_result("✅ 所有初始设定数据同步成功！")
+        image = await draw_message_image(
+            "✅ 所有初始设定数据同步成功！",
+            title_text="🔄 同步初始数据", status_type="success"
+        )
+        image_path = save_message_image(image, "sync_initial_data", plugin.data_dir)
+        yield event.image_result(image_path)
     except Exception as e:
         logger.error(f"同步初始设定数据时出错: {e}")
-        yield event.plain_result(f"❌ 同步初始设定数据失败: {e}")
+        image = await draw_message_image(
+            f"❌ 同步初始设定数据失败: {e}",
+            title_text="🔄 同步初始数据", status_type="error"
+        )
+        image_path = save_message_image(image, "sync_initial_data", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def impersonate_start(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -431,7 +504,12 @@ async def impersonate_start(plugin: "FishingPlugin", event: AstrMessageEvent):
         target_user_id = plugin.impersonation_map[admin_id]
         target_user = plugin.user_repo.get_by_id(target_user_id)
         nickname = target_user.nickname if target_user else "未知用户"
-        yield event.plain_result(f"您当前正在代理用户: {nickname} ({target_user_id})")
+        image = await draw_message_image(
+            f"您当前正在代理用户: {nickname} ({target_user_id})",
+            title_text="🔀 代理上线", status_type="info"
+        )
+        image_path = save_message_image(image, "impersonate_start", plugin.data_dir)
+        yield event.image_result(image_path)
         return
 
     # 解析目标用户ID（支持@和用户ID两种方式）
@@ -444,14 +522,22 @@ async def impersonate_start(plugin: "FishingPlugin", event: AstrMessageEvent):
 
     target_user = plugin.user_repo.get_by_id(target_user_id)
     if not target_user:
-        yield event.plain_result("❌ 目标用户不存在。")
+        image = await draw_message_image(
+            "❌ 目标用户不存在。",
+            title_text="🔀 代理上线", status_type="error"
+        )
+        image_path = save_message_image(image, "impersonate_start", plugin.data_dir)
+        yield event.image_result(image_path)
         return
 
     plugin.impersonation_map[admin_id] = target_user_id
     nickname = target_user.nickname
-    yield event.plain_result(
-        f"✅ 您已成功代理用户: {nickname} ({target_user_id})。\n现在您发送的所有游戏指令都将以该用户的身份执行。\n使用 /代理下线 结束代理。"
+    image = await draw_message_image(
+        f"✅ 您已成功代理用户: {nickname} ({target_user_id})。\n现在您发送的所有游戏指令都将以该用户的身份执行。\n使用 /代理下线 结束代理。",
+        title_text="🔀 代理上线", status_type="success"
     )
+    image_path = save_message_image(image, "impersonate_start", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def impersonate_stop(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -459,9 +545,19 @@ async def impersonate_stop(plugin: "FishingPlugin", event: AstrMessageEvent):
     admin_id = event.get_sender_id()
     if admin_id in plugin.impersonation_map:
         del plugin.impersonation_map[admin_id]
-        yield event.plain_result("✅ 您已成功结束代理。")
+        image = await draw_message_image(
+            "✅ 您已成功结束代理。",
+            title_text="🔀 代理下线", status_type="success"
+        )
+        image_path = save_message_image(image, "impersonate_stop", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result("❌ 您当前没有在代理任何用户。")
+        image = await draw_message_image(
+            "❌ 您当前没有在代理任何用户。",
+            title_text="🔀 代理下线", status_type="error"
+        )
+        image_path = save_message_image(image, "impersonate_stop", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def reward_all_items(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -536,9 +632,12 @@ async def reward_all_items(plugin: "FishingPlugin", event: AstrMessageEvent):
             logger.error(f"给用户 {user_id} 发放道具失败: {e}")
 
     item_name = getattr(item_template, "name", f"ID:{item_id}")
-    yield event.plain_result(
-        f"✅ 全体发放道具完成！\n📦 道具：{item_name} x{quantity}\n✅ 成功：{success_count} 位用户\n❌ 失败：{failed_count} 位用户"
+    image = await draw_message_image(
+        f"✅ 全体发放道具完成！\n📦 道具：{item_name} x{quantity}\n✅ 成功：{success_count} 位用户\n❌ 失败：{failed_count} 位用户",
+        title_text="📦 全体发放道具", status_type="success"
     )
+    image_path = save_message_image(image, "reward_all_items", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def replenish_fish_pools(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -571,8 +670,13 @@ async def replenish_fish_pools(plugin: "FishingPlugin", event: AstrMessageEvent)
         result_msg += "📋 重置详情：\n"
         result_msg += "\n".join(zone_details)
         result_msg += f"\n\n🔄 所有区域的稀有鱼(4星及以上)剩余数量已重置为满配额状态。"
-        
-        yield event.plain_result(result_msg)
+
+        image = await draw_message_image(
+            result_msg, title_text="🎣 补充鱼池",
+            status_type="success"
+        )
+        image_path = save_message_image(image, "replenish", plugin.data_dir)
+        yield event.image_result(image_path)
         
         logger.info(f"管理员 {event.get_sender_id()} 执行了鱼池补充操作，重置了 {reset_count} 个钓鱼区域")
         
@@ -602,7 +706,12 @@ async def grant_title(plugin: "FishingPlugin", event: AstrMessageEvent):
     title_name = " ".join(args[2:])  # 支持称号名称中包含空格
     
     result = plugin.user_service.grant_title_to_user_by_name(target_user_id, title_name)
-    yield event.plain_result(result["message"])
+    image = await draw_message_image(
+        result["message"], title_text="🏅 授予称号",
+        status_type="success" if result.get("success") else "error"
+    )
+    image_path = save_message_image(image, "grant_title", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def revoke_title(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -625,7 +734,12 @@ async def revoke_title(plugin: "FishingPlugin", event: AstrMessageEvent):
     title_name = " ".join(args[2:])  # 支持称号名称中包含空格
     
     result = plugin.user_service.revoke_title_from_user_by_name(target_user_id, title_name)
-    yield event.plain_result(result["message"])
+    image = await draw_message_image(
+        result["message"], title_text="🏅 移除称号",
+        status_type="success" if result.get("success") else "error"
+    )
+    image_path = save_message_image(image, "revoke_title", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def create_title(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -648,4 +762,9 @@ async def create_title(plugin: "FishingPlugin", event: AstrMessageEvent):
         description = f"自定义称号：{title_name}"
     
     result = plugin.user_service.create_custom_title(title_name, description, display_format)
-    yield event.plain_result(result["message"])
+    image = await draw_message_image(
+        result["message"], title_text="🏅 创建称号",
+        status_type="success" if result.get("success") else "error"
+    )
+    image_path = save_message_image(image, "create_title", plugin.data_dir)
+    yield event.image_result(image_path)

@@ -3,6 +3,7 @@ from astrbot.api.event import filter, AstrMessageEvent
 from ..draw.help import draw_help_image
 from ..draw.state import draw_state_image, get_user_state_data
 from ..draw.card_setting import draw_card_setting_message, save_image_to_temp as save_card_image
+from ..draw.message_renderer import draw_message_image, save_message_image
 from ..core.utils import get_now
 from ..utils import safe_datetime_handler, parse_target_user_id, parse_amount
 from typing import TYPE_CHECKING
@@ -16,18 +17,42 @@ async def register_user(self: "FishingPlugin", event: AstrMessageEvent):
     user_id = self._get_effective_user_id(event)
     nickname = event.get_sender_name() if event.get_sender_name() is not None else user_id
     if result := self.user_service.register(user_id, nickname):
-        yield event.plain_result(result["message"])
+        image = await draw_message_image(
+            result["message"],
+            title_text="🎣 注册成功",
+            user_id=user_id,
+            nickname=nickname,
+            data_dir=self.data_dir,
+            status_type="success"
+        )
+        image_path = save_message_image(image, "register", self.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result("❌ 出错啦！请稍后再试。")
+        image = await draw_message_image(
+            "❌ 出错啦！请稍后再试。",
+            title_text="❌ 注册失败",
+            status_type="error"
+        )
+        image_path = save_message_image(image, "register_err", self.data_dir)
+        yield event.image_result(image_path)
 
 async def sign_in(self: "FishingPlugin", event: AstrMessageEvent):
     """签到"""
     user_id = self._get_effective_user_id(event)
+    user = self.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     result = self.user_service.daily_sign_in(user_id)
-    if result["success"]:
-        yield event.plain_result(result["message"])
-    else:
-        yield event.plain_result(result["message"])
+    status = "success" if result["success"] else "error"
+    image = await draw_message_image(
+        result["message"],
+        title_text="📅 签到",
+        user_id=user_id,
+        nickname=nickname,
+        data_dir=self.data_dir,
+        status_type=status
+    )
+    image_path = save_message_image(image, "sign_in", self.data_dir)
+    yield event.image_result(image_path)
 
 async def state(self: "FishingPlugin", event: AstrMessageEvent):
     """查看用户状态"""
@@ -45,7 +70,13 @@ async def state(self: "FishingPlugin", event: AstrMessageEvent):
     )
     
     if not user_data:
-        yield event.plain_result('❌ 用户不存在，请先发送"注册"来开始游戏')
+        image = await draw_message_image(
+            '❌ 用户不存在，请先发送"注册"来开始游戏',
+            title_text="❌ 错误",
+            status_type="error"
+        )
+        image_path = save_message_image(image, "state_err", self.data_dir)
+        yield event.image_result(image_path)
         return
     # 生成状态图像
     image = await draw_state_image(user_data, self.data_dir)
@@ -61,15 +92,39 @@ async def fishing_log(self: "FishingPlugin", event: AstrMessageEvent):
         if result["success"]:
             records = result["records"]
             if not records:
-                yield event.plain_result("❌ 您还没有钓鱼记录。")
+                image = await draw_message_image(
+                    "❌ 您还没有钓鱼记录。",
+                    title_text="📜 钓鱼记录",
+                    user_id=user_id,
+                    nickname=self.user_repo.get_by_id(user_id).nickname if self.user_repo.get_by_id(user_id) else user_id,
+                    data_dir=self.data_dir,
+                    status_type="info"
+                )
+                image_path = save_message_image(image, "fish_log_empty", self.data_dir)
+                yield event.image_result(image_path)
                 return
-            message = "【📜 钓鱼记录】：\n"
-            for record in records:
-                message += (f" - {record['fish_name']} ({'★' * record['fish_rarity']})\n"
-                            f" - ⚖️重量: {record['fish_weight']} 克 - 💰价值: {record['fish_value']} 金币\n"
-                            f" - 🔧装备： {record['accessory']} & {record['rod']} | 🎣鱼饵: {record['bait']}\n"
-                            f" - 钓鱼时间: {safe_datetime_handler(record['timestamp'])}\n")
-            yield event.plain_result(message)
+            message_lines = []
+            for record in records[:20]:  # 最多显示20条
+                message_lines.append(
+                    f"🐟 {record['fish_name']} ({'★' * record['fish_rarity']})\n"
+                    f"   ⚖️{record['fish_weight']}g 💰{record['fish_value']}金币\n"
+                    f"   🕐 {safe_datetime_handler(record['timestamp'])}"
+                )
+            message_text = "\n\n".join(message_lines)
+            if len(records) > 20:
+                message_text += f"\n\n... 还有 {len(records) - 20} 条记录"
+            user = self.user_repo.get_by_id(user_id)
+            nickname = user.nickname if user else user_id
+            image = await draw_message_image(
+                message_text,
+                title_text=f"📜 钓鱼记录 (共{len(records)}条)",
+                user_id=user_id,
+                nickname=nickname,
+                data_dir=self.data_dir,
+                status_type="info"
+            )
+            image_path = save_message_image(image, "fish_log", self.data_dir)
+            yield event.image_result(image_path)
         else:
             yield event.plain_result(f"❌ 获取钓鱼记录失败：{result['message']}")
     else:
@@ -89,14 +144,21 @@ async def transfer_coins(self: "FishingPlugin", event: AstrMessageEvent):
     # 解析目标用户ID（支持@和用户ID两种方式）
     target_user_id, error_msg = parse_target_user_id(event, args, 1)
     if error_msg:
-        yield event.plain_result(error_msg)
+        image = await draw_message_image(error_msg, title_text="❌ 转账失败", status_type="error", width=500)
+        image_path = save_message_image(image, "transfer_err", self.data_dir)
+        yield event.image_result(image_path)
         return
     
     # 检查转账金额参数
     if len(args) < 3:
-        yield event.plain_result(
-            "❌ 请指定转账金额，例如：/转账 @用户 1000 或 /转账 @用户 1万 或 /转账 @用户 一千"
+        image = await draw_message_image(
+            "❌ 请指定转账金额\n例如：/转账 @用户 1000\n或 /转账 @用户 1万\n或 /转账 @用户 一千",
+            title_text="❌ 转账失败",
+            status_type="error",
+            width=500
         )
+        image_path = save_message_image(image, "transfer_err", self.data_dir)
+        yield event.image_result(image_path)
         return
     
     amount_str = args[2]
@@ -109,10 +171,22 @@ async def transfer_coins(self: "FishingPlugin", event: AstrMessageEvent):
         return
     
     from_user_id = self._get_effective_user_id(event)
+    user = self.user_repo.get_by_id(from_user_id)
+    nickname = user.nickname if user else from_user_id
     
     # 调用转账服务
     result = self.user_service.transfer_coins(from_user_id, target_user_id, amount)
-    yield event.plain_result(result["message"])
+    status = "success" if result.get("success", True) else "error"
+    image = await draw_message_image(
+        result["message"],
+        title_text="💰 转账",
+        user_id=from_user_id,
+        nickname=nickname,
+        data_dir=self.data_dir,
+        status_type=status
+    )
+    image_path = save_message_image(image, "transfer", self.data_dir)
+    yield event.image_result(image_path)
 
 
 async def update_nickname(self: "FishingPlugin", event: AstrMessageEvent):
@@ -134,10 +208,22 @@ async def update_nickname(self: "FishingPlugin", event: AstrMessageEvent):
     new_nickname = " ".join(args[1:])
     
     user_id = self._get_effective_user_id(event)
+    user = self.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     
     # 调用用户服务更新昵称
     result = self.user_service.update_nickname(user_id, new_nickname)
-    yield event.plain_result(result["message"])
+    status = "success" if result.get("success", True) else "error"
+    image = await draw_message_image(
+        result["message"],
+        title_text="✏️ 更新昵称",
+        user_id=user_id,
+        nickname=nickname,
+        data_dir=self.data_dir,
+        status_type=status
+    )
+    image_path = save_message_image(image, "update_nickname", self.data_dir)
+    yield event.image_result(image_path)
 
 
 async def set_card_bg(self: "FishingPlugin", event: AstrMessageEvent):
@@ -278,7 +364,7 @@ async def set_card_bg(self: "FishingPlugin", event: AstrMessageEvent):
             "✅ 卡片背景设置成功！\n"
             "📝 您的信息卡片将在以下场景中使用自定义背景：\n"
             "  - 排行榜、背包、状态、鱼塘、水族箱\n"
-            "  - 钓鱼结果、擦弹、命运之轮、偷鱼等\n"
+            "  - 钓鱼结果、偷鱼等\n"
             "💡 发送 /卡片背景 重置 可恢复默认样式"
         )
         image = await draw_card_setting_message(

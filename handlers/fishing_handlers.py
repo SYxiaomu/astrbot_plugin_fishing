@@ -4,6 +4,7 @@ from astrbot.api import logger
 from ..core.utils import get_now
 from ..utils import safe_datetime_handler, to_percentage, safe_get_file_path, format_rarity_display
 from ..draw.pokedex import draw_pokedex
+from ..draw.message_renderer import draw_message_image, save_message_image
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -71,11 +72,16 @@ class FishingHandlers:
         """切换自动钓鱼状态"""
         user_id = self.plugin._get_effective_user_id(event)
         result = self.fishing_service.toggle_auto_fishing(user_id)
-
-        if result["success"]:
-            yield event.plain_result(result["message"])
-        else:
-            yield event.plain_result(result["message"])
+        user = self.plugin.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user else user_id
+        status = "success" if result["success"] else "error"
+        image = await draw_message_image(
+            result["message"], title_text="🎣 自动钓鱼",
+            user_id=user_id, nickname=nickname, data_dir=self.plugin.data_dir,
+            status_type=status
+        )
+        image_path = save_message_image(image, "auto_fish", self.plugin.data_dir)
+        yield event.image_result(image_path)
 
     async def fish_pokedex(self, event: AstrMessageEvent):
         """查看鱼类图鉴"""
@@ -216,10 +222,16 @@ class FishingHandlers:
                 return
 
             result = self.fishing_service.set_user_fishing_zone(user_id, zone_id)
-            if result["success"]:
-                yield event.plain_result(f"✅ {result['message']}")
-            else:
-                yield event.plain_result(f"❌ {result['message']}")
+            user = self.plugin.user_repo.get_by_id(user_id)
+            nickname = user.nickname if user else user_id
+            status = "success" if result["success"] else "error"
+            image = await draw_message_image(
+                result["message"], title_text="🗺️ 切换区域",
+                user_id=user_id, nickname=nickname, data_dir=self.plugin.data_dir,
+                status_type=status
+            )
+            image_path = save_message_image(image, "fishing_zone", self.plugin.data_dir)
+            yield event.image_result(image_path)
 
     async def fish(self, event: AstrMessageEvent):
         """钓鱼"""

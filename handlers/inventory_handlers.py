@@ -2,6 +2,7 @@ import os
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.core.message.components import At
 from ..utils import to_percentage, format_accessory_or_rod, format_rarity_display, parse_amount
+from ..draw.message_renderer import draw_message_image, save_message_image
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -265,22 +266,47 @@ async def pond_capacity(plugin: "FishingPlugin", event: AstrMessageEvent):
     user_id = plugin._get_effective_user_id(event)
     pond_capacity = plugin.inventory_service.get_user_fish_pond_capacity(user_id)
     if pond_capacity["success"]:
-        message = f"🐠 您的鱼塘容量为 {pond_capacity['current_fish_count']} / {pond_capacity['fish_pond_capacity']} 条鱼。"
-        yield event.plain_result(message)
+        user = plugin.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user else user_id
+        msg = f"🐠 您的鱼塘容量为 {pond_capacity['current_fish_count']} / {pond_capacity['fish_pond_capacity']} 条鱼。"
+        image = await draw_message_image(
+            msg, title_text="🐠 鱼塘容量",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="info"
+        )
+        image_path = save_message_image(image, "pond_capacity", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result("❌ 出错啦！请稍后再试。")
+        image = await draw_message_image(
+            "❌ 出错啦！请稍后再试。", title_text="❌ 错误", status_type="error"
+        )
+        image_path = save_message_image(image, "pond_capacity_err", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def upgrade_pond(plugin: "FishingPlugin", event: AstrMessageEvent):
     """升级鱼塘容量"""
     user_id = plugin._get_effective_user_id(event)
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     result = plugin.inventory_service.upgrade_fish_pond(user_id)
     if result["success"]:
-        yield event.plain_result(
-            f"🐠 鱼塘升级成功！新容量为 {result['new_capacity']} 条鱼。"
+        msg = f"🐠 鱼塘升级成功！新容量为 {result['new_capacity']} 条鱼。"
+        image = await draw_message_image(
+            msg, title_text="🐠 升级鱼塘",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="success"
         )
+        image_path = save_message_image(image, "upgrade_pond", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result(f"❌ 升级失败：{result['message']}")
+        image = await draw_message_image(
+            f"❌ 升级失败：{result['message']}", title_text="🐠 升级鱼塘",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="error"
+        )
+        image_path = save_message_image(image, "upgrade_pond_err", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def rod(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -341,21 +367,36 @@ async def bait(plugin: "FishingPlugin", event: AstrMessageEvent):
     user_id = plugin._get_effective_user_id(event)
     bait_info = plugin.inventory_service.get_user_bait_inventory(user_id)
     if bait_info and bait_info["baits"]:
-        # 构造输出信息,附带emoji
-        message = "【🐟 鱼饵】：\n"
-
+        user = plugin.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user else user_id
+        # 构造输出信息
+        lines = []
         for bait in bait_info["baits"]:
             bait_id = int(bait.get("bait_id", 0) or 0)
             bcode = f"B{bait_id}" if bait_id else "B0"
-            message += f" - {bait['name']} x {bait['quantity']} (稀有度: {format_rarity_display(bait['rarity'])}) ID: {bcode}\n"
+            line = f"{bait['name']} x {bait['quantity']} (稀有度: {format_rarity_display(bait['rarity'])}) ID: {bcode}"
             if bait["duration_minutes"] > 0:
-                message += f"   - 持续时间: {bait['duration_minutes']} 分钟\n"
+                line += f"\n   持续时间: {bait['duration_minutes']} 分钟"
             if bait["effect_description"]:
-                message += f"   - 效果: {bait['effect_description']}\n"
-            message += "\n"
-        yield event.plain_result(message)
+                line += f"\n   效果: {bait['effect_description']}"
+            lines.append(line)
+        msg = "\n\n".join(lines)
+        image = await draw_message_image(
+            msg, title_text=f"🐟 鱼饵 (共{len(bait_info['baits'])}种)",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="info", width=600
+        )
+        image_path = save_message_image(image, "baits", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result("🐟 您还没有鱼饵，快去商店购买或抽奖获得吧！")
+        image = await draw_message_image(
+            "🐟 您还没有鱼饵，快去商店购买或抽奖获得吧！",
+            title_text="🐟 鱼饵",
+            user_id=user_id, nickname=plugin.user_repo.get_by_id(user_id).nickname if plugin.user_repo.get_by_id(user_id) else user_id,
+            data_dir=plugin.data_dir, status_type="info"
+        )
+        image_path = save_message_image(image, "baits_empty", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def items(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -383,17 +424,24 @@ async def items(plugin: "FishingPlugin", event: AstrMessageEvent):
     except Exception as e:
         from astrbot.api import logger
         logger.error(f"生成道具图片时发生错误: {e}", exc_info=True)
-        # 回退到文本输出
-        message = "【📦 道具】：\n"
+        # 回退到图片输出
+        lines = []
         for it in items_list:
             item_id = int(it.get("item_id", 0) or 0)
             dcode = f"D{item_id}" if item_id else "D0"
             consumable_text = "消耗品" if it.get("is_consumable") else "非消耗"
-            message += f" - {it['name']} x {it['quantity']} (稀有度: {format_rarity_display(it['rarity'])}，{consumable_text}) ID: {dcode}\n"
+            line = f" - {it['name']} x {it['quantity']} (稀有度: {format_rarity_display(it['rarity'])}，{consumable_text}) ID: {dcode}"
             if it.get("effect_description"):
-                message += f"   - 效果: {it['effect_description']}\n"
-            message += "\n"
-        yield event.plain_result(message)
+                line += f"\n   - 效果: {it['effect_description']}"
+            lines.append(line)
+        msg = "\n".join(lines)
+        image = await draw_message_image(
+            msg, title_text=f"📦 道具 (共{len(items_list)}种)",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="info"
+        )
+        image_path = save_message_image(image, "items", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def use_item(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -425,10 +473,21 @@ async def use_item(plugin: "FishingPlugin", event: AstrMessageEvent):
     result = plugin.inventory_service.use_item(user_id, item_id, quantity)
 
     if result and result.get("success"):
-        yield event.plain_result(f"✅ {result['message']}")
+        image = await draw_message_image(
+            f"✅ {result['message']}", title_text="📦 使用道具",
+            user_id=user_id, nickname=plugin.user_repo.get_by_id(user_id).nickname if plugin.user_repo.get_by_id(user_id) else user_id,
+            data_dir=plugin.data_dir, status_type="success"
+        )
+        image_path = save_message_image(image, "use_item", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
         error_message = result.get("message", "未知错误") if result else "未知错误"
-        yield event.plain_result(f"❌ 使用道具失败：{error_message}")
+        image = await draw_message_image(
+            f"❌ 使用道具失败：{error_message}", title_text="📦 使用道具",
+            status_type="error"
+        )
+        image_path = save_message_image(image, "use_item_err", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def open_all_money_bags(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -438,10 +497,21 @@ async def open_all_money_bags(plugin: "FishingPlugin", event: AstrMessageEvent):
     result = plugin.inventory_service.open_all_money_bags(user_id)
 
     if result and result.get("success"):
-        yield event.plain_result(f"✅ {result['message']}")
+        image = await draw_message_image(
+            f"✅ {result['message']}", title_text="💰 开启全部钱袋",
+            user_id=user_id, nickname=plugin.user_repo.get_by_id(user_id).nickname if plugin.user_repo.get_by_id(user_id) else user_id,
+            data_dir=plugin.data_dir, status_type="success"
+        )
+        image_path = save_message_image(image, "open_bags", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
         error_message = result.get("message", "未知错误") if result else "未知错误"
-        yield event.plain_result(f"❌ 开启钱袋失败：{error_message}")
+        image = await draw_message_image(
+            f"❌ 开启钱袋失败：{error_message}", title_text="💰 开启全部钱袋",
+            status_type="error"
+        )
+        image_path = save_message_image(image, "open_bags_err", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def accessories(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -586,7 +656,12 @@ async def refine_help(plugin: "FishingPlugin", event: AstrMessageEvent):
 
 """
 
-    yield event.plain_result(help_message)
+    image = await draw_message_image(
+        help_message, title_text="🔨 精炼系统指南",
+        status_type="info", width=600
+    )
+    image_path = save_message_image(image, "refine_help", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def use_equipment(plugin: "FishingPlugin", event: AstrMessageEvent, equipment_type: str = None):
@@ -785,11 +860,25 @@ async def refine_equipment(plugin: "FishingPlugin", event: AstrMessageEvent, equ
         return
 
     # 精炼物品
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     if result := plugin.inventory_service.refine(user_id, int(instance_id), target_type):
         if result["success"]:
-            yield event.plain_result(result["message"])
+            image = await draw_message_image(
+                result["message"], title_text="🔨 精炼装备",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="success"
+            )
+            image_path = save_message_image(image, "refine", plugin.data_dir)
+            yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"❌ 精炼失败：{result['message']}")
+            image = await draw_message_image(
+                f"❌ 精炼失败：{result['message']}", title_text="🔨 精炼装备",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="error"
+            )
+            image_path = save_message_image(image, "refine_err", plugin.data_dir)
+            yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -856,11 +945,25 @@ async def sell_equipment(plugin: "FishingPlugin", event: AstrMessageEvent, equip
                 return
 
         # 出售道具
+        user = plugin.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user else user_id
         if result := plugin.inventory_service.sell_item(user_id, item_id, quantity):
             if result["success"]:
-                yield event.plain_result(result["message"])
+                image = await draw_message_image(
+                    result["message"], title_text="💰 出售道具",
+                    user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                    status_type="success"
+                )
+                image_path = save_message_image(image, "sell_item", plugin.data_dir)
+                yield event.image_result(image_path)
             else:
-                yield event.plain_result(f"❌ 出售失败：{result['message']}")
+                image = await draw_message_image(
+                    f"❌ 出售失败：{result['message']}", title_text="💰 出售道具",
+                    user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                    status_type="error"
+                )
+                image_path = save_message_image(image, "sell_item_err", plugin.data_dir)
+                yield event.image_result(image_path)
         else:
             yield event.plain_result("❌ 出错啦！请稍后再试。")
         return
@@ -882,10 +985,24 @@ async def sell_equipment(plugin: "FishingPlugin", event: AstrMessageEvent, equip
     if result := plugin.inventory_service.sell_equipment(
         user_id, int(instance_id), target_type
     ):
+        user = plugin.user_repo.get_by_id(user_id)
+        nickname = user.nickname if user else user_id
         if result["success"]:
-            yield event.plain_result(result["message"])
+            image = await draw_message_image(
+                result["message"], title_text=f"💰 出售{type_name}",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="success"
+            )
+            image_path = save_message_image(image, "sell_equip", plugin.data_dir)
+            yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"❌ 出售失败：{result['message']}")
+            image = await draw_message_image(
+                f"❌ 出售失败：{result['message']}", title_text=f"💰 出售{type_name}",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="error"
+            )
+            image_path = save_message_image(image, "sell_equip_err", plugin.data_dir)
+            yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -943,10 +1060,24 @@ async def lock_equipment(plugin: "FishingPlugin", event: AstrMessageEvent, equip
     else:
         result = plugin.inventory_service.lock_accessory(user_id, int(instance_id))
 
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     if result["success"]:
-        yield event.plain_result(result["message"])
+        image = await draw_message_image(
+            result["message"], title_text="🔒 锁定装备",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="success"
+        )
+        image_path = save_message_image(image, "lock", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result(f"❌ 锁定失败：{result['message']}")
+        image = await draw_message_image(
+            f"❌ 锁定失败：{result['message']}", title_text="🔒 锁定装备",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="error"
+        )
+        image_path = save_message_image(image, "lock_err", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def unlock_equipment(plugin: "FishingPlugin", event: AstrMessageEvent, equipment_type: str = None):
@@ -1002,10 +1133,24 @@ async def unlock_equipment(plugin: "FishingPlugin", event: AstrMessageEvent, equ
     else:
         result = plugin.inventory_service.unlock_accessory(user_id, int(instance_id))
 
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     if result["success"]:
-        yield event.plain_result(result["message"])
+        image = await draw_message_image(
+            result["message"], title_text="🔓 解锁装备",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="success"
+        )
+        image_path = save_message_image(image, "unlock", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
-        yield event.plain_result(f"❌ 解锁失败：{result['message']}")
+        image = await draw_message_image(
+            f"❌ 解锁失败：{result['message']}", title_text="🔓 解锁装备",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="error"
+        )
+        image_path = save_message_image(image, "unlock_err", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def coins(plugin: "FishingPlugin", event: AstrMessageEvent):

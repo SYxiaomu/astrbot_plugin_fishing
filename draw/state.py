@@ -21,26 +21,14 @@ def format_rarity_display(rarity: int) -> str:
     else:
         return '★★★★★★★★★★+'
 
+
 async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Image:
     """
     绘制用户状态图像
     
     Args:
-        user_data: 包含用户状态信息的字典，    # 定义状态信息的网格位置
-    status_col_x = card_margin + 15
-    status_row1_y = current_y + 12
-    status_row2_y = current_y + 35
-    status_row3_y = current_y + 58
-
-    # 自动钓鱼状态
-    auto_fishing = user_data.get('auto_fishing_enabled', False)
-    if auto_fishing:
-        auto_text = "自动钓鱼: 已开启"
-        auto_color = positive_color
-    else:
-        auto_text = "自动钓鱼: 已关闭"
-        auto_color = negative_color
-    draw.text((status_col_x, status_row1_y), auto_text, font=content_font, fill=auto_color)      - user_id: 用户ID
+        user_data: 包含用户状态信息的字典
+            - user_id: 用户ID
             - nickname: 用户昵称
             - coins: 金币数量
             - current_rod: 当前装备的鱼竿信息
@@ -53,9 +41,7 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
             - total_fishing_count: 总钓鱼次数
             - steal_total_value: 偷鱼总价值 TODO
             - signed_in_today: 今日是否签到
-            - wipe_bomb_remaining: 擦弹剩余次数
             - electric_fish_cooldown_remaining: 电鱼剩余CD时间（秒）
-            - wof_remaining_plays: 命运之轮剩余次数
             - pond_info: 鱼塘信息
     Returns:
         PIL.Image.Image: 生成的状态图像
@@ -189,16 +175,13 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
             small_font,
             rare_color
         )
-    # else:
-    #     title_text = "未装备
-    #     draw.text((col1_x + nickname_width + 10, row1_y + height_offset), title_text, font=small_font, fill=text_color)
     
     # 金币
     coins = user_data.get('coins', 0)
     coins_text = f"金币: {coins:,}"
     draw.text((col1_x, row2_y - 12), coins_text, font=small_font, fill=gold_color)
     
-    # 高级货币（另起一行，避免与右侧“钓鱼次数”重叠）
+    # 高级货币（另起一行，避免与右侧"钓鱼次数"重叠）
     if 'premium_currency' in user_data:
         premium = user_data.get('premium_currency', 0)
         premium_text = f"高级货币: {premium:,}"
@@ -209,12 +192,6 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
     total_fishing = user_data.get('total_fishing_count', 0)
     fishing_text = f"钓鱼次数: {total_fishing:,}"
     draw.text((col2_x, row2_y), fishing_text, font=small_font, fill=text_primary)
-
-    # 偷鱼总价值 - 调整列位置以均分 TODO
-    # steal_total = user_data.get('steal_total_value', 0)
-    # steal_text = f"偷鱼获金: {steal_total:,}"
-    # col3_adjusted_x = card_margin + (width - card_margin * 2) * 2 // 3 + card_margin
-    # draw.text((col3_adjusted_x, row2_y), steal_text, font=small_font, fill=warning_color)
 
     # 装备信息区域
     current_y += card_height + 5
@@ -405,16 +382,6 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
         sign_color = error_color
     draw.text((status_col1_x, status_row1_y), sign_text, font=content_font, fill=sign_color)
 
-    # 右列第一行：擦弹次数
-    wipe_remaining = user_data.get('wipe_bomb_remaining', 0)
-    if wipe_remaining > 0:
-        wipe_text = f"擦弹次数: 剩余 {wipe_remaining} 次"
-        wipe_color = error_color
-    else:
-        wipe_text = "擦弹次数: 已用完"
-        wipe_color = text_muted
-    draw.text((status_col2_x, status_row1_y), wipe_text, font=content_font, fill=wipe_color)
-
     # 左列第二行：自动钓鱼状态
     auto_fishing = user_data.get('auto_fishing_enabled', False)
     if auto_fishing:
@@ -450,16 +417,6 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
         ef_cd_text = "准备好电鱼了！"
         ef_cd_color = error_color
     draw.text((status_col1_x, status_row3_y), ef_cd_text, font=content_font, fill=ef_cd_color)
-
-    # 第三行右列: 命运之轮
-    wof_rem = user_data.get('wof_remaining_plays', 0)
-    if wof_rem > 0:
-        wof_text = f"命运之轮: 剩余 {wof_rem} 次"
-        wof_color = error_color
-    else:
-        wof_text = "命运之轮: 已用完"
-        wof_color = text_muted
-    draw.text((status_col2_x, status_row3_y), wof_text, font=content_font, fill=wof_color)
 
     # 第四行：鱼塘信息
     pond_info = user_data.get('pond_info', {})
@@ -635,8 +592,7 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
     total_fishing_count = getattr(user, 'total_fishing_count', 0)
     
     # 获取偷鱼总价值
-    # steal_total_value = getattr(user, 'steal_total_value', 0)
-    steal_total_value = '0' # 似乎没有偷鱼总价值字段？
+    steal_total_value = '0'
 
     # 检查今日是否签到
     signed_in_today = False
@@ -644,44 +600,6 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
         today = get_now().date()
         last_login_date = user.last_login_time.date() if hasattr(user.last_login_time, 'date') else user.last_login_time
         signed_in_today = (last_login_date == today)
-    
-    # 计算擦弹剩余次数
-    wipe_bomb_remaining = 0
-    # 确保 user 对象有新添加的字段，做向后兼容
-    if hasattr(user, 'last_wipe_bomb_date') and hasattr(user, 'wipe_bomb_attempts_today'):
-        base_max_attempts = game_config.get("wipe_bomb", {}).get("max_attempts_per_day", 3)
-        extra_attempts = 0
-        boost_buff = buff_repo.get_active_by_user_and_type(user_id, "WIPE_BOMB_ATTEMPTS_BOOST")
-        if boost_buff and boost_buff.payload:
-            try:
-                extra_attempts = json.loads(boost_buff.payload).get("amount", 0)
-            except json.JSONDecodeError: pass
-        
-        total_max_attempts = base_max_attempts + extra_attempts
-        
-        today_str = get_today().strftime('%Y-%m-%d')
-        used_attempts_today = 0
-        # 如果记录的日期是今天，就使用记录的次数；否则次数为0
-        if user.last_wipe_bomb_date == today_str:
-            used_attempts_today = user.wipe_bomb_attempts_today
-
-        wipe_bomb_remaining = max(0, total_max_attempts - used_attempts_today)
-    else:
-        # 如果数据库中的用户数据还没有新字段（例如，尚未迁移），提供一个默认值
-        wipe_bomb_remaining = game_config.get("wipe_bomb", {}).get("max_attempts_per_day", 3)
-
-    # 计算命运之轮剩余次数
-    wheel_of_fate_daily_limit = game_config.get("wheel_of_fate_daily_limit", 3)
-    wof_remaining_plays = 0
-    if hasattr(user, 'last_wof_date') and hasattr(user, 'wof_plays_today'):
-        today_str = get_today().strftime('%Y-%m-%d')
-        if user.last_wof_date == today_str:
-            wof_remaining_plays = max(0, wheel_of_fate_daily_limit - user.wof_plays_today)
-        else:
-            wof_remaining_plays = wheel_of_fate_daily_limit
-    else:
-        # 兼容旧数据，给予最大次数
-        wof_remaining_plays = wheel_of_fate_daily_limit
     
     # 获取鱼塘信息
     pond_info = None
@@ -721,7 +639,5 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
         'total_fishing_count': total_fishing_count,
         'steal_total_value': steal_total_value,
         'signed_in_today': signed_in_today,
-        'wipe_bomb_remaining': wipe_bomb_remaining,
         'pond_info': pond_info,
-        'wof_remaining_plays': wof_remaining_plays,
     }

@@ -2,6 +2,7 @@ import os
 from astrbot.api.event import filter, AstrMessageEvent
 from ..utils import format_rarity_display, parse_target_user_id, parse_amount
 from ..draw.sell_result import draw_sell_result, draw_coins_balance
+from ..draw.message_renderer import draw_message_image, save_message_image
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -233,15 +234,25 @@ async def buy_in_shop(plugin: "FishingPlugin", event: AstrMessageEvent):
             yield event.plain_result(f"❌ 无法解析数量：{str(e)}。示例：1 或 五 或 一千")
             return
     result = plugin.shop_service.purchase_item(user_id, int(item_id), qty)
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     if result.get("success"):
-        yield event.plain_result(result["message"])
+        image = await draw_message_image(
+            result["message"], title_text="🛒 商店购买",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="success"
+        )
+        image_path = save_message_image(image, "buy_shop", plugin.data_dir)
+        yield event.image_result(image_path)
     else:
         error_message = result.get("message", "购买失败")
-        # 检查错误消息是否已经包含❌符号，避免重复添加
-        if error_message.startswith("❌"):
-            yield event.plain_result(error_message)
-        else:
-            yield event.plain_result(f"❌ {error_message}")
+        image = await draw_message_image(
+            error_message, title_text="🛒 商店购买",
+            user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+            status_type="error"
+        )
+        image_path = save_message_image(image, "buy_shop_err", plugin.data_dir)
+        yield event.image_result(image_path)
 
 
 async def market(plugin: "FishingPlugin", event: AstrMessageEvent):
@@ -338,24 +349,13 @@ async def market(plugin: "FishingPlugin", event: AstrMessageEvent):
     full_message += "💡 挂单有效期为5天，过期将自动下架返还\n"
     full_message += "💡 使用「购买 ID」购买，例如：购买 C5"
 
-    # 为避免消息过长，进行分割发送
-    if len(full_message) > 1800:
-        # 简单的按分区（双换行）分割
-        parts = full_message.split("\n\n")
-        current_part = ""
-        for part in parts:
-            # 如果当前部分加上新部分超过长度限制，就先发送当前部分
-            if len(current_part) + len(part) + 2 > 1800 and current_part:
-                yield event.plain_result(current_part)
-                current_part = part + "\n\n"
-            else:
-                current_part += part + "\n\n"
-
-        # 发送最后剩余的部分
-        if current_part.strip():
-            yield event.plain_result(current_part.strip())
-    else:
-        yield event.plain_result(full_message)
+    # 使用图片渲染输出
+    image = await draw_message_image(
+        full_message.strip(), title_text="🛒 市场",
+        status_type="info", width=600
+    )
+    image_path = save_message_image(image, "market", plugin.data_dir)
+    yield event.image_result(image_path)
 
 
 async def list_any(
@@ -512,14 +512,28 @@ async def list_any(
         yield event.plain_result("❌ 无效ID，请使用以 R/A/D/F/C 开头的短码")
         return
 
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     if result:
         if result.get("success"):
             message = result["message"]
             if is_anonymous:
                 message = f"🎭 {message} (匿名上架)"
-            yield event.plain_result(message)
+            image = await draw_message_image(
+                message, title_text="📤 上架",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="success"
+            )
+            image_path = save_message_image(image, "list_item", plugin.data_dir)
+            yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"❌ 上架失败：{result['message']}")
+            image = await draw_message_image(
+                result["message"], title_text="📤 上架",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="error"
+            )
+            image_path = save_message_image(image, "list_item_err", plugin.data_dir)
+            yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -541,11 +555,25 @@ async def buy_item(plugin: "FishingPlugin", event: AstrMessageEvent):
         return
 
     result = plugin.market_service.buy_market_item(user_id, market_id)
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     if result:
         if result["success"]:
-            yield event.plain_result(result["message"])
+            image = await draw_message_image(
+                result["message"], title_text="🛒 购买",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="success"
+            )
+            image_path = save_message_image(image, "buy_item", plugin.data_dir)
+            yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"❌ 购买失败：{result['message']}")
+            image = await draw_message_image(
+                f"❌ 购买失败：{result['message']}", title_text="🛒 购买",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="error"
+            )
+            image_path = save_message_image(image, "buy_item_err", plugin.data_dir)
+            yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
@@ -589,7 +617,12 @@ async def my_listings(plugin: "FishingPlugin", event: AstrMessageEvent):
 
             message += "💡 使用「下架 ID」命令下架指定商品"
 
-            yield event.plain_result(message)
+            image = await draw_message_image(
+                message, title_text=f"🛒 我的上架 (第 {page + 1}/{total_pages} 页)",
+                status_type="info", width=550
+            )
+            image_path = save_message_image(image, f"my_listings_p{page}", plugin.data_dir)
+            yield event.image_result(image_path)
     else:
         yield event.plain_result(f"❌ 查询失败：{result['message']}")
 
@@ -614,11 +647,25 @@ async def delist_item(plugin: "FishingPlugin", event: AstrMessageEvent):
             yield event.plain_result(f"❌ {e}\n💡 使用「我的上架」命令查看您的商品列表")
             return
     result = plugin.market_service.delist_item(user_id, market_id)
+    user = plugin.user_repo.get_by_id(user_id)
+    nickname = user.nickname if user else user_id
     if result:
         if result["success"]:
-            yield event.plain_result(result["message"])
+            image = await draw_message_image(
+                result["message"], title_text="📤 下架",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="success"
+            )
+            image_path = save_message_image(image, "delist", plugin.data_dir)
+            yield event.image_result(image_path)
         else:
-            yield event.plain_result(f"❌ 下架失败：{result['message']}")
+            image = await draw_message_image(
+                f"❌ 下架失败：{result['message']}", title_text="📤 下架",
+                user_id=user_id, nickname=nickname, data_dir=plugin.data_dir,
+                status_type="error"
+            )
+            image_path = save_message_image(image, "delist_err", plugin.data_dir)
+            yield event.image_result(image_path)
     else:
         yield event.plain_result("❌ 出错啦！请稍后再试。")
 
