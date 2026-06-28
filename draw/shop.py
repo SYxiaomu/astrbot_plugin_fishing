@@ -59,6 +59,64 @@ def get_item_emoji(reward_type: str, item_name: str = "") -> str:
     return "📦"
 
 
+def get_item_attributes_text(rewards: List[Dict[str, Any]], item_template_repo) -> List[str]:
+    """获取道具属性文本列表（不带emoji）"""
+    attrs = []
+    for reward in rewards:
+        r_type = reward.get("reward_type", "")
+        r_id = reward.get("reward_item_id")
+
+        if r_type == "rod":
+            tpl = item_template_repo.get_rod_by_id(r_id) if r_id else None
+            if tpl:
+                parts = []
+                if tpl.bonus_fish_quality_modifier != 1.0:
+                    parts.append(f"品质x{tpl.bonus_fish_quality_modifier}")
+                if tpl.bonus_fish_quantity_modifier != 1.0:
+                    parts.append(f"数量x{tpl.bonus_fish_quantity_modifier}")
+                if tpl.bonus_rare_fish_chance > 0:
+                    parts.append(f"稀有+{tpl.bonus_rare_fish_chance*100:.0f}%")
+                if tpl.durability:
+                    parts.append(f"耐久{tpl.durability}")
+                if parts:
+                    attrs.append(f"{' '.join(parts)}")
+        elif r_type == "bait":
+            tpl = item_template_repo.get_bait_by_id(r_id) if r_id else None
+            if tpl:
+                parts = []
+                if tpl.success_rate_modifier != 0:
+                    parts.append(f"成功率+{tpl.success_rate_modifier*100:.0f}%")
+                if tpl.rare_chance_modifier != 0:
+                    parts.append(f"稀有+{tpl.rare_chance_modifier*100:.0f}%")
+                if tpl.value_modifier != 1.0:
+                    parts.append(f"价值x{tpl.value_modifier}")
+                if tpl.quantity_modifier != 1.0:
+                    parts.append(f"数量x{tpl.quantity_modifier}")
+                if parts:
+                    attrs.append(f"{' '.join(parts)}")
+        elif r_type == "accessory":
+            tpl = item_template_repo.get_accessory_by_id(r_id) if r_id else None
+            if tpl:
+                parts = []
+                if tpl.bonus_fish_quality_modifier != 1.0:
+                    parts.append(f"品质x{tpl.bonus_fish_quality_modifier}")
+                if tpl.bonus_fish_quantity_modifier != 1.0:
+                    parts.append(f"数量x{tpl.bonus_fish_quantity_modifier}")
+                if tpl.bonus_rare_fish_chance > 0:
+                    parts.append(f"稀有+{tpl.bonus_rare_fish_chance*100:.0f}%")
+                if tpl.bonus_coin_modifier != 1.0:
+                    parts.append(f"金币x{tpl.bonus_coin_modifier}")
+                if tpl.other_bonus_description:
+                    parts.append(tpl.other_bonus_description)
+                if parts:
+                    attrs.append(f"{' '.join(parts)}")
+        elif r_type == "item":
+            tpl = item_template_repo.get_item_by_id(r_id) if r_id else None
+            if tpl and tpl.effect_description:
+                attrs.append(f"{tpl.effect_description}")
+    return attrs
+
+
 def _create_base_image(width: int, height: int):
     """创建基础渐变背景图像"""
     from .gradient_utils import create_vertical_gradient
@@ -338,10 +396,10 @@ async def draw_shop_image(shop: Dict[str, Any], items: List[Dict[str, Any]],
         line_h = get_text_size("测", tiny_font)[1] + 2
         lines = 0
 
-        # 描述行
+        # 描述行 (+1 for "描述：" label)
         if item.get('description'):
             desc_lines = len(wrap_text_by_width(item['description'], tiny_font, card_width - 30))
-            lines += desc_lines
+            lines += 1 + desc_lines  # "描述：" + description lines
         # 奖励物品行
         if len(rewards) >= 2:
             lines += len(rewards) + 1  # "包含物品:" + 每个奖励
@@ -349,8 +407,20 @@ async def draw_shop_image(shop: Dict[str, Any], items: List[Dict[str, Any]],
             reward = rewards[0]
             if reward.get('reward_quantity', 1) > 1:
                 lines += 1
+        # 道具属性行（考虑"属性："标签占位和换行）
+        attrs = get_item_attributes_text(rewards, item_template_repo)
+        if attrs:
+            attr_label_w = get_text_size("属性：", tiny_font)[0]
+            for i, attr in enumerate(attrs):
+                if i == 0:
+                    # 第一行："属性："占用部分宽度
+                    attr_w = card_width - 30 - attr_label_w
+                else:
+                    attr_w = card_width - 30
+                attr_lines = len(wrap_text_by_width(attr, tiny_font, max(attr_w, 10)))
+                lines += attr_lines
 
-        header_height = 85  # 名称+星级+价格+库存+ID+限购+时间
+        header_height = 85  # 名称+库存|ID+稀有度+消耗+限购+时间
         bottom_pad = 15
         card_h = header_height + lines * line_h + bottom_pad
         return max(card_h, 160)
@@ -428,9 +498,25 @@ async def draw_shop_image(shop: Dict[str, Any], items: List[Dict[str, Any]],
 
             draw_rounded_rectangle(draw, (x, y, x + card_width, y + card_h), 8, fill=colors['card_bg'])
 
-            # 商品名称
+            # 商品名称（content_font）+ 库存|ID（tiny_font，像描述那样）
             item_name = item['name'][:15] + "..." if len(item['name']) > 15 else item['name']
+            stock_str = "无限" if item.get("stock_total") is None else f"{item.get('stock_sold',0)}/{item.get('stock_total')}"
             draw.text((x + 15, y + 12), item_name, font=content_font, fill=colors['text_primary'])
+            stock_text = f"库存: {stock_str} | ID: {item['item_id']}"
+            name_w = get_text_size(item_name, content_font)[0]
+            stock_w = get_text_size(stock_text, tiny_font)[0]
+            draw.text((x + 15 + name_w + 8, y + 15), stock_text, font=tiny_font, fill=colors['text_secondary'])
+            # 限购信息追加到ID后面（保持原有 primary_light 颜色）
+            limit_info = []
+            if item.get("per_user_limit") is not None:
+                limit_info.append(f"每人限购{item['per_user_limit']}")
+            if item.get("per_user_daily_limit") is not None:
+                limit_info.append(f"每日限购{item['per_user_daily_limit']}")
+            if limit_info:
+                limit_text = " | " + " ".join(limit_info)
+                draw.text((x + 15 + name_w + 8 + stock_w, y + 15), limit_text, font=tiny_font, fill=colors['primary_light'])
+
+            detail_y = y + 38
 
             # 稀有度
             rarity = 1
@@ -476,10 +562,15 @@ async def draw_shop_image(shop: Dict[str, Any], items: List[Dict[str, Any]],
 
             star_color = colors['rare_color'] if rarity > 4 else colors['warning_color'] if rarity >= 3 else colors['text_secondary']
             rarity_label = format_rarity_display(rarity)
-            draw_text_with_stars(image, draw, (x + 15, y + 35), rarity_label,
+            # 绘制"稀有度："文本
+            rarity_prefix = "稀有度："
+            draw.text((x + 15, detail_y), rarity_prefix, font=tiny_font, fill=colors['text_secondary'])
+            prefix_w = get_text_size(rarity_prefix, tiny_font)[0]
+            draw_text_with_stars(image, draw, (x + 15 + prefix_w, detail_y), rarity_label,
                                  font=small_font, fill=star_color, star_size=14)
+            detail_y += 18
 
-            # 价格
+            # 消耗
             cost_parts = []
             for c in costs:
                 if c["cost_type"] == "coins":
@@ -507,6 +598,7 @@ async def draw_shop_image(shop: Dict[str, Any], items: List[Dict[str, Any]],
                     cost_parts.append(f"💍{acc_name}x{c['cost_amount']}")
 
             cost_str = " + ".join(cost_parts) if cost_parts else "免费"
+            cost_label = f"消耗：{cost_str}"
             # 检查是否有高品质鱼，单独渲染✨避免emoji逐字符渲染导致偏移
             has_hq_fish = any(c.get("cost_type") == "fish" and c.get("quality_level", 0) == 1 for c in costs)
             if has_hq_fish and "高品质" in cost_str:
@@ -514,32 +606,18 @@ async def draw_shop_image(shop: Dict[str, Any], items: List[Dict[str, Any]],
                 before = cost_str[:idx]
                 after = cost_str[idx:]
                 cx_start = x + 15
-                draw.text((cx_start, y + 55), before, font=tiny_font, fill=colors['gold_color'])
+                draw.text((cx_start, detail_y), "消耗：", font=tiny_font, fill=colors['text_secondary'])
+                cw = get_text_size("消耗：", tiny_font)[0]
+                draw.text((cx_start + cw, detail_y), before, font=tiny_font, fill=colors['gold_color'])
                 from .styles import _get_emoji_font
                 emoji_font = _get_emoji_font(tiny_font.size)
                 bw = get_text_size(before, tiny_font)[0]
-                draw.text((cx_start + bw, y + 55), "✨", font=emoji_font if emoji_font else tiny_font, fill=colors['gold_color'])
+                draw.text((cx_start + cw + bw, detail_y), "✨", font=emoji_font if emoji_font else tiny_font, fill=colors['gold_color'])
                 ew = get_text_size("✨", emoji_font if emoji_font else tiny_font)[0]
-                draw.text((cx_start + bw + ew, y + 55), after, font=tiny_font, fill=colors['gold_color'])
+                draw.text((cx_start + cw + bw + ew, detail_y), after, font=tiny_font, fill=colors['gold_color'])
             else:
-                draw.text((x + 15, y + 55), cost_str, font=tiny_font, fill=colors['gold_color'])
-
-            # 库存和ID
-            stock_str = "无限" if item.get("stock_total") is None else f"{item.get('stock_sold',0)}/{item.get('stock_total')}"
-            detail_y = y + 72
-            draw.text((x + 15, detail_y), f"库存: {stock_str} | ID: {item['item_id']}", font=tiny_font, fill=colors['text_secondary'])
-            detail_y += 16
-
-            # 限购信息
-            limit_info = []
-            if item.get("per_user_limit") is not None:
-                limit_info.append(f"每人限购{item['per_user_limit']}")
-            if item.get("per_user_daily_limit") is not None:
-                limit_info.append(f"每日限购{item['per_user_daily_limit']}")
-
-            if limit_info:
-                draw.text((x + 15, detail_y), "限购: " + " | ".join(limit_info), font=tiny_font, fill=colors['primary_light'])
-                detail_y += 16
+                draw.text((x + 15, detail_y), cost_label, font=tiny_font, fill=colors['gold_color'])
+            detail_y += 18
 
             # 限时信息
             current_time = datetime.now()
@@ -573,7 +651,7 @@ async def draw_shop_image(shop: Dict[str, Any], items: List[Dict[str, Any]],
 
             if time_info:
                 draw.text((x + 15, detail_y), "限时: " + " | ".join(time_info), font=tiny_font, fill=colors['warning_color'])
-                detail_y += 16
+                detail_y += 18
 
             # 奖励物品
             if len(rewards) >= 2:
@@ -630,12 +708,47 @@ async def draw_shop_image(shop: Dict[str, Any], items: List[Dict[str, Any]],
 
             # 描述
             if item.get('description'):
+                desc_label = "描述："
+                draw.text((x + 15, detail_y), desc_label, font=tiny_font, fill=colors['text_secondary'])
+                detail_y += 16
                 desc_lines = wrap_text_by_width(item['description'], tiny_font, card_width - 30)
                 line_h = get_text_size("测", tiny_font)[1] + 2
                 max_lines = max((y + card_h - 15) - detail_y, 0) // line_h
                 if max_lines > 0:
                     for li, line in enumerate(desc_lines[:max_lines]):
                         draw.text((x + 15, detail_y + li * line_h), line, font=tiny_font, fill=colors['text_secondary'])
+                    detail_y += min(len(desc_lines), max_lines) * line_h
+
+            # 道具属性（如果有的话，"属性："和内容同一行，超长自动换行）
+            attrs = get_item_attributes_text(rewards, item_template_repo)
+            if attrs:
+                line_h = get_text_size("测", tiny_font)[1] + 2
+                # 第一行："属性：" + 第一个属性文本
+                first_attr = attrs[0]
+                attr_label = "属性："
+                label_w = get_text_size(attr_label, tiny_font)[0]
+                remaining_w = card_width - 30 - label_w
+                if remaining_w > 0:
+                    first_line = wrap_text_by_width(first_attr, tiny_font, remaining_w)
+                else:
+                    first_line = [first_attr]
+                draw.text((x + 15, detail_y), attr_label, font=tiny_font, fill=colors['text_secondary'])
+                draw.text((x + 15 + label_w, detail_y), first_line[0], font=tiny_font, fill=colors['success_color'])
+                detail_y += line_h
+                # 第一行剩余的换行部分
+                for fl in first_line[1:]:
+                    if detail_y + line_h > y + card_h - 15:
+                        break
+                    draw.text((x + 15, detail_y), fl, font=tiny_font, fill=colors['success_color'])
+                    detail_y += line_h
+                # 后续属性
+                for attr in attrs[1:]:
+                    attr_lines = wrap_text_by_width(attr, tiny_font, card_width - 30)
+                    for al in attr_lines:
+                        if detail_y + line_h > y + card_h - 15:
+                            break
+                        draw.text((x + 15, detail_y), al, font=tiny_font, fill=colors['success_color'])
+                        detail_y += line_h
 
         current_y = next_row_start_y
     else:
