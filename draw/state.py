@@ -385,8 +385,32 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
     # 左列第二行：自动钓鱼状态
     auto_fishing = user_data.get('auto_fishing_enabled', False)
     if auto_fishing:
+        # 计算自动钓鱼剩余时间（最多运行12小时）
+        auto_start_time = user_data.get('auto_fishing_start_time')
         auto_text = "自动钓鱼: 已开启"
         auto_color = success_color
+        if auto_start_time:
+            try:
+                from datetime import datetime
+                # 处理时区问题
+                now = datetime.now()
+                if hasattr(auto_start_time, 'tzinfo') and auto_start_time.tzinfo is not None:
+                    now = now.replace(tzinfo=auto_start_time.tzinfo)
+                elapsed_seconds = (now - auto_start_time).total_seconds()
+                max_seconds = 12 * 3600  # 12小时
+                remaining_seconds = max_seconds - elapsed_seconds
+                if remaining_seconds > 0:
+                    remaining_hours = int(remaining_seconds // 3600)
+                    remaining_minutes = int((remaining_seconds % 3600) // 60)
+                    if remaining_hours > 0:
+                        auto_text = f"自动钓鱼: 已开启（剩余{remaining_hours}h{remaining_minutes}min）"
+                    else:
+                        auto_text = f"自动钓鱼: 已开启（剩余{remaining_minutes}min）"
+                else:
+                    auto_text = "自动钓鱼: 已开启（即将结束）"
+                    auto_color = warning_color
+            except Exception:
+                pass  # 计算失败则使用默认文本
     else:
         auto_text = "自动钓鱼: 已关闭"
         auto_color = error_color
@@ -397,10 +421,13 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
     if steal_cd > 0:
         hours = steal_cd // 3600
         minutes = (steal_cd % 3600) // 60
+        seconds = steal_cd % 60
         if hours > 0:
-            cd_text = f"偷鱼冷却: {hours}小时{minutes}分钟"
+            cd_text = f"偷鱼冷却: {hours}h{minutes}min{seconds}s"
+        elif minutes > 0:
+            cd_text = f"偷鱼冷却: {minutes}min{seconds}s"
         else:
-            cd_text = f"偷鱼冷却: {minutes}分钟"
+            cd_text = f"偷鱼冷却: {seconds}s"
         cd_color = text_muted
     else:
         cd_text = "准备好偷鱼了！"
@@ -410,8 +437,15 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
     # 第三行左列: 电鱼CD
     ef_cd = user_data.get('electric_fish_cooldown_remaining', 0)
     if ef_cd > 0:
-        h, m = ef_cd // 3600, (ef_cd % 3600) // 60
-        ef_cd_text = f"电鱼冷却: {h}小时{m}分钟" if h > 0 else f"电鱼冷却: {m}分钟"
+        h = ef_cd // 3600
+        m = (ef_cd % 3600) // 60
+        s = ef_cd % 60
+        if h > 0:
+            ef_cd_text = f"电鱼冷却: {h}h{m}min{s}s"
+        elif m > 0:
+            ef_cd_text = f"电鱼冷却: {m}min{s}s"
+        else:
+            ef_cd_text = f"电鱼冷却: {s}s"
         ef_cd_color = text_muted
     else: 
         ef_cd_text = "准备好电鱼了！"
@@ -632,6 +666,7 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
         'current_accessory': current_accessory,
         'current_bait': current_bait,
         'auto_fishing_enabled': user.auto_fishing_enabled,
+        'auto_fishing_start_time': getattr(user, 'auto_fishing_start_time', None),
         'steal_cooldown_remaining': steal_cooldown_remaining,
         'electric_fish_cooldown_remaining': electric_fish_cooldown_remaining,
         'fishing_zone': fishing_zone,
