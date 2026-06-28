@@ -662,16 +662,74 @@ class InventoryService:
             refine_level=rod_to_sell.refine_level,
         )
 
-        # 4. 执行操作
-        # 如果卖出的是当前装备的鱼竿，需要先卸下
+        # 4. 检查是否已装备
         if rod_to_sell.is_equipped:
-            user.equipped_rod_instance_id = None
+            return {"success": False, "message": "该鱼竿当前已装备，请先卸下后再出售"}
 
         self.inventory_repo.delete_rod_instance(rod_instance_id)
         user.coins += sell_price
         self.user_repo.update(user)
 
         return {"success": True, "message": f"成功出售鱼竿【{rod_template.name}】，获得 {sell_price} 金币"}
+
+    def sell_accessory(self, user_id: str, accessory_instance_id: int) -> Dict[str, Any]:
+        """
+        向系统出售指定的饰品。
+        """
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            return {"success": False, "message": "用户不存在"}
+
+        # 1. 验证饰品是否属于该用户
+        user_accessories = self.inventory_repo.get_user_accessory_instances(user_id)
+        accessory_to_sell = next(
+            (a for a in user_accessories if a.accessory_instance_id == accessory_instance_id), None
+        )
+
+        if not accessory_to_sell:
+            return {"success": False, "message": "饰品不存在或不属于你"}
+
+        # 检查是否锁定
+        if accessory_to_sell.is_locked:
+            return {"success": False, "message": "该饰品已锁定，无法出售"}
+
+        # 2. 获取饰品模板以计算售价
+        accessory_template = self.item_template_repo.get_accessory_by_id(accessory_to_sell.accessory_id)
+        if not accessory_template:
+            return {"success": False, "message": "找不到饰品的基础信息"}
+
+        # 3. 计算售价
+        sell_price = self.game_mechanics_service.calculate_sell_price(
+            item_type="accessory",
+            rarity=accessory_template.rarity,
+            refine_level=accessory_to_sell.refine_level,
+        )
+
+        # 4. 检查是否已装备
+        if accessory_to_sell.is_equipped:
+            return {"success": False, "message": "该饰品当前已装备，请先卸下后再出售"}
+
+        self.inventory_repo.delete_accessory_instance(accessory_instance_id)
+        user.coins += sell_price
+        self.user_repo.update(user)
+
+        return {"success": True, "message": f"成功出售饰品【{accessory_template.name}】，获得 {sell_price} 金币"}
+
+    def sell_equipment(self, user_id: str, instance_id: int, item_type: str) -> Dict[str, Any]:
+        """
+        统一出售装备的入口，根据 item_type 分派到对应的出售方法。
+        
+        Args:
+            user_id: 用户ID
+            instance_id: 装备实例ID
+            item_type: 装备类型，"rod" 或 "accessory"
+        """
+        if item_type == "rod":
+            return self.sell_rod(user_id, instance_id)
+        elif item_type == "accessory":
+            return self.sell_accessory(user_id, instance_id)
+        else:
+            return {"success": False, "message": "❌ 不支持的装备类型"}
 
     def sell_all_rods(self, user_id: str) -> Dict[str, Any]:
         """
