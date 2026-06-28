@@ -1,0 +1,114 @@
+{% extends "layout.html" %}
+
+{% block title %}船舶管理{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>船舶管理</h2>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#shipModal" id="addShipBtn">
+            <i class="fas fa-plus"></i> 添加船舶
+        </button>
+    </div>
+    <p>管理游戏中的船舶模板。船舶共5级，用于控制海洋区域的访问权限。</p>
+
+    <div class="table-responsive mt-4">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>名称</th>
+                    <th>等级</th>
+                    <th>描述</th>
+                    <th>金币消耗</th>
+                    <th>所需鱼类</th>
+                    <th>可到达海域等级</th>
+                    <th class="text-end">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ship in ships %}
+                <tr>
+                    <td>{{ ship.ship_id }}</td>
+                    <td>{{ ship.name }}</td>
+                    <td>{{ ship.level }}</td>
+                    <td>{{ ship.description or '无' }}</td>
+                    <td>{{ "{:,}".format(ship.cost_coins) }}</td>
+                    <td>{{ ship.required_fish or '无' }}</td>
+                    <td>{{ ship.max_ocean_zone_level }}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-info edit-btn"
+                                data-bs-toggle="modal"
+                                data-bs-target="#shipModal"
+                                data-item-json='{{ ship|tojson|safe }}'>
+                            <i class="fas fa-edit"></i> 编辑
+                        </button>
+                        <form action="{{ url_for('admin_bp.delete_ship', ship_id=ship.ship_id) }}" method="post" class="d-inline" onsubmit="return confirm('确定要删除【{{ ship.name }}】吗？');">
+                            <button type="submit" class="btn btn-sm btn-danger">
+                                <i class="fas fa-trash"></i> 删除
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Ship Modal -->
+<div class="modal fade" id="shipModal" tabindex="-1" aria-labelledby="shipModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="ship-form" method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="shipModalLabel">管理船舶</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label for="name" class="form-label">名称</label>
+                            <input type="text" id="name" name="name" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="level" class="form-label">等级 (1-5)</label>
+                            <input type="number" id="level" name="level" class="form-control" min="1" max="5" required>
+                        </div>
+                        <div class="col-12">
+                            <label for="description" class="form-label">描述</label>
+                            <textarea id="description" name="description" class="form-control" rows="2"></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="cost_coins" class="form-label">金币消耗</label>
+                            <input type="number" id="cost_coins" name="cost_coins" class="form-control" min="0" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="max_ocean_zone_level" class="form-label">可达海域等级</label>
+                            <input type="number" id="max_ocean_zone_level" name="max_ocean_zone_level" class="form-control" min="1" max="5">
+                            <div class="form-text">该船舶可到达的最高海洋区域等级</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="required_fish" class="form-label">所需鱼类 (JSON)</label>
+                            <input type="text" id="required_fish" name="required_fish" class="form-control" placeholder='[{"fish_tag":"xxx","quantity":5}]'>
+                            <div class="form-text">JSON格式，如 [{"fish_tag":"tag","quantity":5}]</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const addUrl = "{{ url_for('admin_bp.add_ship') }}";
+    const editUrlBase = "{{ url_for('admin_bp.edit_ship', ship_id=0) }}".slice(0, -1);
+</script>
+<script src="{{ url_for('admin_bp.static', filename='js/ships_manager.js') }}"></script>
+{% endblock %}

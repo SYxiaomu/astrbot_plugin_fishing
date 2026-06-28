@@ -58,6 +58,29 @@
                 {% endif %}
                 <p><strong>稀有鱼每日配额:</strong> {{ zone.daily_rare_fish_quota }}</p>
                 <p><strong>钓鱼消耗:</strong> {{ zone.fishing_cost }} 金币</p>
+                <p><strong>区域类型:</strong> 
+                    <span class="badge bg-{{ 'info' if zone.zone_type == 'ocean' else 'success' }}">
+                        {{ '🌊 海洋区域' if zone.zone_type == 'ocean' else '🏞️ 陆地区域' }}
+                    </span>
+                </p>
+                {% if zone.zone_type == 'ocean' %}
+                <p><strong>需要船舶等级:</strong> <span class="badge bg-warning">Lv.{{ zone.required_ship_level or 1 }}</span></p>
+                {% endif %}
+                <p><strong>区域标签:</strong>
+                    {% set tag = zone_id_to_tag.get(zone.id) %}
+                    {% if tag %}
+                        {% for t in zone_tags %}
+                            {% if t.value == tag %}
+                                <span class="badge bg-info">{{ t.label }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <span class="badge bg-secondary">自定义区域</span>
+                    {% endif %}
+                </p>
+                {% if zone.bg_image_path %}
+                <p><strong>背景图路径:</strong> <code>{{ zone.bg_image_path }}</code></p>
+                {% endif %}
                 {% if zone.requires_pass and zone.required_item_id %}
                 <p><strong>通行证要求:</strong> 
                     <span class="badge bg-warning">
@@ -96,7 +119,16 @@
                             </div>
                         {% endif %}
                     {% else %}
-                        <p class="text-muted">无 (使用全局鱼池)</p>
+                        {% set tag = zone_id_to_tag.get(zone.id) %}
+                        {% if tag %}
+                            {% for t in zone_tags %}
+                                {% if t.value == tag %}
+                                    <p class="text-muted">按区域标签 <strong>{{ t.label }}</strong> 自动筛选（当前未手动限定）</p>
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">无 (使用全局鱼池)</p>
+                        {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -141,6 +173,8 @@
     const zonesData = {{ zones|tojson }};
     const allFishData = {{ all_fish|tojson }};
     const allItemsData = {{ all_items|tojson }};
+    const zoneTagOptions = {{ zone_tags|tojson }};
+    const zoneIdToTag = {{ zone_id_to_tag|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/zones_manager.js') }}"></script>
 {% endblock %}

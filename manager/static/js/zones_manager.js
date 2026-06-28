@@ -109,15 +109,35 @@ document.addEventListener('DOMContentLoaded', function() {
                         <label for="daily_rare_fish_quota" class="form-label">稀有鱼每日配额</label>
                         <input type="number" class="form-control" name="daily_rare_fish_quota" value="${zone?.daily_rare_fish_quota || 0}">
                     </div>
+                <div class="row">
                     <div class="col-md-4 mb-3">
                         <label for="fishing_cost" class="form-label">钓鱼消耗 (金币)</label>
                         <input type="number" class="form-control" name="fishing_cost" value="${zone?.fishing_cost || 10}" min="1">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="zone_type" class="form-label">区域类型</label>
+                        <select class="form-control" name="zone_type" id="zone_type">
+                            <option value="land" ${zone?.zone_type === 'land' || !zone?.zone_type ? 'selected' : ''}>🏞️ 陆地区域</option>
+                            <option value="ocean" ${zone?.zone_type === 'ocean' ? 'selected' : ''}>🌊 海洋区域</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3" id="ship_level_group">
+                        <label for="required_ship_level" class="form-label">需要船舶等级</label>
+                        <input type="number" class="form-control" name="required_ship_level" value="${zone?.required_ship_level || 1}" min="1" max="5">
+                        <small class="text-muted">仅海洋区域需要船舶</small>
                     </div>
                     <div class="col-md-4 mb-3 d-flex align-items-end">
                         <div class="form-check form-switch mb-0">
                             <input class="form-check-input" type="checkbox" name="is_active" id="is_active" ${zone?.is_active ?? true ? 'checked' : ''}>
                             <label class="form-check-label ms-2" for="is_active">启用区域</label>
                         </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <label for="bg_image_path" class="form-label">背景图路径 (可选)</label>
+                        <input type="text" class="form-control" name="bg_image_path" value="${zone?.bg_image_path || ''}" placeholder="data/bg/zones/zone_1.png">
+                        <small class="text-muted">留空使用自动生成的默认背景图</small>
                     </div>
                 </div>
                 <div class="row">
@@ -170,6 +190,21 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <button type="button" class="btn btn-outline-success" id="addSelectedBtn"><i class="fas fa-plus"></i> 添加</button>
                                 <button type="button" class="btn btn-outline-danger" id="removeSelectedBtn"><i class="fas fa-minus"></i> 移除</button>
                             </div>
+                        </div>
+                    </div>
+                    <!-- 区域标签快速添加 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <select class="form-control form-control-sm" id="zoneTagSelect">
+                                <option value="">-- 按区域标签快速添加 --</option>
+                                ${zoneTagOptions.filter(t => t.value).map(t => `<option value="${t.value}">${t.label}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="quickAddByTagBtn"><i class="fas fa-tag"></i> 快速添加该区域所有鱼</button>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted" id="zoneTagFishCount"></small>
                         </div>
                     </div>
                     <div class="row">
@@ -558,6 +593,17 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
         
+        // Zone type toggle: show/hide ship level field
+        const zoneTypeSelect = form.querySelector('select[name="zone_type"]');
+        const shipLevelGroup = form.querySelector('#ship_level_group');
+        if (zoneTypeSelect && shipLevelGroup) {
+            const toggleShipLevel = () => {
+                shipLevelGroup.style.display = zoneTypeSelect.value === 'ocean' ? '' : 'none';
+            };
+            zoneTypeSelect.addEventListener('change', toggleShipLevel);
+            toggleShipLevel();
+        }
+        
         // Limited time toggle
         const timeToggle = form.querySelector('input[name="limit_time"]');
         const fromInput = form.querySelector('input[name="available_from"]');
@@ -584,6 +630,9 @@ document.addEventListener('DOMContentLoaded', function() {
             payload.id = parseInt(payload.id);
             payload.daily_rare_fish_quota = parseInt(payload.daily_rare_fish_quota) || 0;
             payload.fishing_cost = parseInt(payload.fishing_cost) || 10;
+            payload.zone_type = payload.zone_type || 'land';
+            payload.required_ship_level = payload.zone_type === 'ocean' ? (parseInt(payload.required_ship_level) || 1) : 0;
+            payload.bg_image_path = payload.bg_image_path || null;
             payload.is_active = form.querySelector('input[name="is_active"]').checked;
             if (!form.querySelector('input[name="limit_time"]').checked) {
                 payload.available_from = '';

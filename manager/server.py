@@ -4,6 +4,35 @@ import traceback
 from typing import Dict, Any
 from datetime import datetime, timedelta
 import csv
+
+# 区域标签选项，用于鱼的管理和区域设置
+ZONE_TAG_OPTIONS = [
+    {"value": "", "label": "无区域限制"},
+    {"value": "tropical_rainforest", "label": "热带雨林溪流"},
+    {"value": "subtropical_estuary", "label": "亚热带河口湿地"},
+    {"value": "temperate_lake", "label": "温带平原湖泊"},
+    {"value": "cold_taiga_river", "label": "寒带针叶林河流"},
+    {"value": "arid_salt_lake", "label": "干旱区内陆盐湖"},
+    {"value": "coastal_bay", "label": "近岸浅湾"},
+    {"value": "continental_shelf", "label": "大陆架渔场"},
+    {"value": "cold_fjord", "label": "寒带峡湾"},
+    {"value": "oceanic_ridge", "label": "远洋海岭"},
+    {"value": "polar_ice_margin", "label": "极地冰缘海"},
+]
+
+# 区域ID到zone_tag的映射（仅用于区域卡片显示）
+ZONE_ID_TO_TAG = {
+    1: "tropical_rainforest",
+    2: "subtropical_estuary",
+    3: "temperate_lake",
+    4: "cold_taiga_river",
+    5: "arid_salt_lake",
+    6: "coastal_bay",
+    7: "continental_shelf",
+    8: "cold_fjord",
+    9: "oceanic_ridge",
+    10: "polar_ice_margin",
+}
 import io
 
 from quart import (
@@ -126,7 +155,7 @@ async def index():
 async def manage_fish():
     item_template_service = current_app.config["ITEM_TEMPLATE_SERVICE"]
     fishes = item_template_service.get_all_fish()
-    return await render_template("fish.html", fishes=fishes)
+    return await render_template("fish.html", fishes=fishes, zone_tags=ZONE_TAG_OPTIONS)
 
 @admin_bp.route("/fish/add", methods=["POST"])
 @login_required
@@ -158,8 +187,8 @@ async def delete_fish(fish_id):
 @admin_bp.route("/fish/csv/template")
 @login_required
 async def fish_csv_template():
-    header = ["name", "description", "rarity", "base_value", "min_weight", "max_weight", "icon_url"]
-    sample = ["示例鱼", "一条很普通的示例鱼", "1", "10", "100", "500", ""]
+    header = ["name", "description", "rarity", "base_value", "min_weight", "max_weight", "icon_url", "zone_tag"]
+    sample = ["示例鱼", "一条很普通的示例鱼", "1", "10", "100", "500", "", "tropical_rainforest"]
     
     output = io.StringIO()
     writer = csv.writer(output)
@@ -207,6 +236,7 @@ async def import_fish_csv():
                     "min_weight": int(row.get("min_weight") or 1),
                     "max_weight": int(row.get("max_weight") or 100),
                     "icon_url": (row.get("icon_url") or "").strip() or None,
+                    "zone_tag": (row.get("zone_tag") or "").strip() or None,
                 }
                 if not data["name"]:
                     raise ValueError("缺少名称")
@@ -1323,7 +1353,9 @@ async def manage_zones():
     zones = fishing_zone_service.get_all_zones()
     all_fish = item_template_service.get_all_fish()
     all_items = item_template_service.get_all_items()
-    return await render_template('zones.html', zones=zones, all_fish=all_fish, all_items=all_items)
+    return await render_template('zones.html', zones=zones, all_fish=all_fish,
+                               all_items=all_items, zone_tags=ZONE_TAG_OPTIONS,
+                               zone_id_to_tag=ZONE_ID_TO_TAG)
 
 @admin_bp.route('/api/zones', methods=['POST'])
 @login_required
@@ -1893,3 +1925,71 @@ async def create_offer():
         return redirect(url_for("admin_bp.manage_shops"))
 
 # 旧的商品管理API路由已移除，功能已集成到商店详情页面
+
+
+# ===== 船舶管理 (Ships) =====
+@admin_bp.route("/ships")
+@login_required
+async def manage_ships():
+    """船舶列表页面"""
+    ship_service = current_app.config["SHIP_SERVICE"]
+    all_ships = ship_service.ship_repo.get_all_ships()
+    return await render_template("ships.html", ships=all_ships)
+
+
+@admin_bp.route("/ships/add", methods=["POST"])
+@login_required
+async def add_ship():
+    """添加船舶"""
+    form = await request.form
+    ship_service = current_app.config["SHIP_SERVICE"]
+    try:
+        ship_service.ship_repo.add_ship({
+            "name": form["name"],
+            "level": int(form["level"]),
+            "description": form.get("description", ""),
+            "cost_coins": int(form.get("cost_coins", 0)),
+            "required_fish": form.get("required_fish", ""),
+            "max_ocean_zone_level": int(form.get("max_ocean_zone_level", 1)),
+        })
+        await flash("船舶添加成功！", "success")
+    except Exception as e:
+        logger.error(f"添加船舶失败: {e}")
+        await flash(f"添加船舶失败: {e}", "danger")
+    return redirect(url_for("admin_bp.manage_ships"))
+
+
+@admin_bp.route("/ships/edit/<int:ship_id>", methods=["POST"])
+@login_required
+async def edit_ship(ship_id):
+    """编辑船舶"""
+    form = await request.form
+    ship_service = current_app.config["SHIP_SERVICE"]
+    try:
+        ship_service.ship_repo.update_ship(ship_id, {
+            "name": form["name"],
+            "level": int(form["level"]),
+            "description": form.get("description", ""),
+            "cost_coins": int(form.get("cost_coins", 0)),
+            "required_fish": form.get("required_fish", ""),
+            "max_ocean_zone_level": int(form.get("max_ocean_zone_level", 1)),
+        })
+        await flash("船舶更新成功！", "success")
+    except Exception as e:
+        logger.error(f"更新船舶失败: {e}")
+        await flash(f"更新船舶失败: {e}", "danger")
+    return redirect(url_for("admin_bp.manage_ships"))
+
+
+@admin_bp.route("/ships/delete/<int:ship_id>", methods=["POST"])
+@login_required
+async def delete_ship(ship_id):
+    """删除船舶"""
+    ship_service = current_app.config["SHIP_SERVICE"]
+    try:
+        ship_service.ship_repo.delete_ship(ship_id)
+        await flash(f"船舶ID {ship_id} 已删除！", "warning")
+    except Exception as e:
+        logger.error(f"删除船舶失败: {e}")
+        await flash(f"删除船舶失败: {e}", "danger")
+    return redirect(url_for("admin_bp.manage_ships"))

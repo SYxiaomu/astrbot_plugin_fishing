@@ -107,6 +107,9 @@ class SqliteUserRepository(AbstractUserRepository):
 
             # --- [新功能] 用户自定义卡片背景 ---
             card_bg_path=row["card_bg_path"] if "card_bg_path" in row_keys else None,
+
+            # --- [新功能] 船舶等级 ---
+            ship_level=row["ship_level"] if "ship_level" in row_keys else 0,
         )
 
     def get_by_id(self, user_id: str) -> Optional[User]:

@@ -517,8 +517,8 @@ class SqliteInventoryRepository(AbstractInventoryRepository):
             cursor = conn.cursor()
             try:
                 cursor.execute("""
-                    INSERT INTO fishing_zones (id, name, description, daily_rare_fish_quota, configs, is_active, available_from, available_until, required_item_id, requires_pass, fishing_cost)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO fishing_zones (id, name, description, daily_rare_fish_quota, configs, is_active, available_from, available_until, required_item_id, requires_pass, fishing_cost, zone_type, required_ship_level, bg_image_path)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     zone_data['id'],
                     zone_data['name'],
@@ -530,7 +530,10 @@ class SqliteInventoryRepository(AbstractInventoryRepository):
                     zone_data.get('available_until'),
                     zone_data.get('required_item_id'),
                     zone_data.get('requires_pass', False),
-                    zone_data.get('fishing_cost', 10)
+                    zone_data.get('fishing_cost', 10),
+                    zone_data.get('zone_type', 'land'),
+                    zone_data.get('required_ship_level', 0),
+                    zone_data.get('bg_image_path'),
                 ))
                 conn.commit()
             except sqlite3.IntegrityError as e:
@@ -546,7 +549,7 @@ class SqliteInventoryRepository(AbstractInventoryRepository):
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE fishing_zones
-                SET name = ?, description = ?, daily_rare_fish_quota = ?, configs = ?, is_active = ?, available_from = ?, available_until = ?, required_item_id = ?, requires_pass = ?, fishing_cost = ?
+                SET name = ?, description = ?, daily_rare_fish_quota = ?, configs = ?, is_active = ?, available_from = ?, available_until = ?, required_item_id = ?, requires_pass = ?, fishing_cost = ?, zone_type = ?, required_ship_level = ?, bg_image_path = ?
                 WHERE id = ?
             """, (
                 zone_data['name'],
@@ -559,6 +562,9 @@ class SqliteInventoryRepository(AbstractInventoryRepository):
                 zone_data.get('required_item_id'),
                 zone_data.get('requires_pass', False),
                 zone_data.get('fishing_cost', 10),
+                zone_data.get('zone_type', 'land'),
+                zone_data.get('required_ship_level', 0),
+                zone_data.get('bg_image_path'),
                 zone_id
             ))
             conn.commit()

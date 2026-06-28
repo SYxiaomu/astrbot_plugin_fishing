@@ -17,7 +17,22 @@ from ..repositories.abstract_repository import (
 )
 from ..domain.models import FishingRecord, TaxRecord, FishingZone
 from ..services.fishing_zone_service import FishingZoneService
+from ..services.ship_service import ShipService
 from ..utils import get_now, get_fish_template, get_today, get_last_reset_time, calculate_after_refine
+
+# 区域ID到zone_tag的映射，用于按区域过滤鱼类
+ZONE_TAG_MAP = {
+    1: "tropical_rainforest",
+    2: "subtropical_estuary",
+    3: "temperate_lake",
+    4: "cold_taiga_river",
+    5: "arid_salt_lake",
+    6: "coastal_bay",
+    7: "continental_shelf",
+    8: "cold_fjord",
+    9: "oceanic_ridge",
+    10: "polar_ice_margin",
+}
 
 
 class FishingService:
@@ -32,6 +47,7 @@ class FishingService:
         buff_repo: AbstractUserBuffRepository,
         fishing_zone_service: FishingZoneService,
         config: Dict[str, Any],
+        ship_service: ShipService = None,
     ):
         self.user_repo = user_repo
         self.inventory_repo = inventory_repo
@@ -40,6 +56,7 @@ class FishingService:
         self.buff_repo = buff_repo
         self.fishing_zone_service = fishing_zone_service
         self.config = config
+        self.ship_service = ship_service
 
         # 获取每日刷新时间配置
         self.daily_reset_hour = self.config.get("daily_reset_hour", 0)
@@ -142,6 +159,17 @@ class FishingService:
             first_zone_name = first_zone.name if first_zone else "初始区域"
             return {"success": False, "message": f"该钓鱼区域已于 {zone.available_until.strftime('%Y-%m-%d %H:%M')} 关闭，已自动传送回{first_zone_name}"}
         
+        # 检查船舶等级要求（海洋区域需要船舶）
+        zone_type = getattr(zone, 'zone_type', 'land')
+        if zone_type == 'ocean' and self.ship_service:
+            required_level = zone.required_ship_level or 1
+            user_ship_level = user.ship_level
+            if user_ship_level < required_level:
+                return {
+                    "success": False,
+                    "message": f"❌ 需要 {required_level} 级船舶才能在该海洋区域钓鱼！当前船舶等级: {user_ship_level}"
+                }
+
         fishing_cost = zone.fishing_cost
         if not user.can_afford(fishing_cost):
             return {"success": False, "message": f"金币不足，需要 {fishing_cost} 金币。"}
@@ -600,6 +628,9 @@ class FishingService:
                 "fishing_cost": zone.fishing_cost,
                 "available_from": zone.available_from,
                 "available_until": zone.available_until,
+                "zone_type": getattr(zone, 'zone_type', 'land'),
+                "required_ship_level": getattr(zone, 'required_ship_level', 0),
+                "bg_image_path": getattr(zone, 'bg_image_path', None),
             })
 
         return {
@@ -696,11 +727,17 @@ class FishingService:
             fish_list = [self.item_template_repo.get_fish_by_id(fish_id) for fish_id in specific_fish_ids]
             fish_list = [fish for fish in fish_list if fish and fish.rarity == rarity]
         else:
-            # 否则就在全局鱼里面抽
-            fish_list = self.item_template_repo.get_fishes_by_rarity(rarity)
+            # 否则按区域标签(zone_tag)筛选该区域的鱼类
+            zone_tag = ZONE_TAG_MAP.get(zone.id)
+            if zone_tag:
+                all_fish = self.item_template_repo.get_fishes_by_rarity(rarity)
+                fish_list = [f for f in all_fish if f.zone_tag == zone_tag]
+            else:
+                # 未知区域回退到全局鱼池
+                fish_list = self.item_template_repo.get_fishes_by_rarity(rarity)
 
         if not fish_list:
-            # 如果限定鱼或全局鱼列表为空，则从所有鱼中随机抽取一条
+            # 如果限定鱼或区域鱼列表为空，则从所有鱼中随机抽取一条
             return self.item_template_repo.get_random_fish(rarity)
 
         return get_fish_template(fish_list, coins_chance)
@@ -715,8 +752,14 @@ class FishingService:
             fish_list = [self.item_template_repo.get_fish_by_id(fish_id) for fish_id in specific_fish_ids]
             fish_list = [fish for fish in fish_list if fish]
         else:
-            # 否则在全局鱼池中查找
-            fish_list = self.item_template_repo.get_all_fish()
+            # 否则按区域标签(zone_tag)筛选该区域的高星级鱼类
+            zone_tag = ZONE_TAG_MAP.get(zone.id) if zone else None
+            if zone_tag:
+                all_fish = self.item_template_repo.get_all_fish()
+                fish_list = [f for f in all_fish if f.zone_tag == zone_tag]
+            else:
+                # 未知区域回退到全局鱼池
+                fish_list = self.item_template_repo.get_all_fish()
         
         # 找出所有6星及以上的稀有度
         high_rarities = set()
@@ -767,6 +810,18 @@ class FishingService:
         
         if zone.available_until and now > zone.available_until:
             return {"success": False, "message": f"该钓鱼区域已于 {zone.available_until.strftime('%Y-%m-%d %H:%M')} 关闭"}
+
+        # 检查船舶等级要求（海洋区域需要船舶）
+        zone_type = getattr(zone, 'zone_type', 'land')
+        if zone_type == 'ocean' and self.ship_service:
+            required_level = zone.required_ship_level or 1
+            user_ship_level = user.ship_level
+            if user_ship_level < required_level:
+                # 改用更直接的方式
+                return {
+                    "success": False,
+                    "message": f"❌ 需要 {required_level} 级船舶才能进入该海洋区域！当前船舶等级: {user_ship_level}"
+                }
 
         # 检查通行证要求（从数据库读取）
         pass_consumed = False

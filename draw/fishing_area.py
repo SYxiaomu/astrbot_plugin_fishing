@@ -17,7 +17,7 @@ def calculate_dynamic_height(zones: List[Dict[str, Any]]) -> int:
     base_height = 220  # 标题 + 用户信息卡片 + 底部
     zone_count = len(zones)
     if zone_count > 0:
-        zone_section_height = zone_count * 120 + max(zone_count - 1, 0) * 15
+        zone_section_height = zone_count * 148 + max(zone_count - 1, 0) * 15
     else:
         zone_section_height = 50
     return base_height + zone_section_height + 100
@@ -153,7 +153,7 @@ async def draw_fishing_area_image(zones: List[Dict[str, Any]],
 
     for i, zone in enumerate(zones):
         y = current_y
-        card_h = 120
+        card_h = 148
         current_y += card_h + card_margin
 
         ensure_height(y + card_h + 40)
@@ -185,11 +185,21 @@ async def draw_fishing_area_image(zones: List[Dict[str, Any]],
         draw.text((30 + card_width - 20 - status_w, y + 12), status_icon, font=tiny_font,
                  fill=success_color if is_active else error_color)
 
-        # 第2行：钓鱼费用
+        # 第2行：钓鱼费用 + 区域类型
         cost = zone.get('fishing_cost', 0)
-        detail_y = y + 42
+        zone_type = zone.get('zone_type', 'land')
+        detail_y = y + 40
         cost_text = f"💰 钓鱼费用：{cost}金币"
         draw.text((45, detail_y), cost_text, font=small_font, fill=gold_color)
+
+        # 区域类型标记
+        type_emoji = '🌊' if zone_type == 'ocean' else '🏞️'
+        type_label = '海洋' if zone_type == 'ocean' else '陆地'
+        type_color = (41, 128, 185) if zone_type == 'ocean' else (46, 204, 113)
+        type_full = f"{type_emoji} {type_label}"
+        type_w, type_h = get_text_size(type_full, tiny_font)
+        type_x = 45 + get_text_size(cost_text, small_font)[0] + 30
+        draw.text((type_x, detail_y + 2), type_full, font=tiny_font, fill=type_color)
 
         # 第3行：稀有鱼剩余
         detail_y += 28
@@ -203,8 +213,16 @@ async def draw_fishing_area_image(zones: List[Dict[str, Any]],
             quota_color = text_secondary
         draw.text((45, detail_y), fish_text, font=small_font, fill=quota_color)
 
-        # 第4行：通行证要求和开放时间
+        # 第4行：船舶等级要求（海洋区域）
         detail_y += 28
+        if zone_type == 'ocean':
+            required_ship = zone.get('required_ship_level', 1)
+            ship_text = f"🚢 需要船舶等级：Lv.{required_ship}"
+            draw.text((45, detail_y), ship_text, font=small_font, fill=warning_color)
+
+        # 第5行：通行证要求和开放时间
+        boat_offset = 28 if zone_type == 'ocean' else 0
+        detail_y += boat_offset
         extra_parts = []
         if zone.get("requires_pass") and zone.get("required_item_name"):
             extra_parts.append(f"🔑 需要: {zone['required_item_name']}")

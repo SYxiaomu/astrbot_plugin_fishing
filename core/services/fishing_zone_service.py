@@ -147,7 +147,10 @@ class FishingZoneService:
                 "specific_fish_ids": specific_fish_ids,
                 "required_item_id": zone.required_item_id,
                 "requires_pass": zone.requires_pass,
-                "fishing_cost": zone.fishing_cost
+                "fishing_cost": zone.fishing_cost,
+                "zone_type": getattr(zone, 'zone_type', 'land'),
+                "required_ship_level": getattr(zone, 'required_ship_level', 0),
+                "bg_image_path": getattr(zone, 'bg_image_path', None),
             })
         return zones_data
 

@@ -382,6 +382,18 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
         sign_color = error_color
     draw.text((status_col1_x, status_row1_y), sign_text, font=content_font, fill=sign_color)
 
+    # 右列第一行：船舶等级
+    ship_level = user_data.get('ship_level', 0)
+    if ship_level > 0:
+        ship_names = {1:'独木舟',2:'小渔船',3:'机动渔船',4:'远洋渔船',5:'极地破冰船'}
+        ship_name = ship_names.get(ship_level, f'{ship_level}级船')
+        ship_text = f"船舶: {ship_name} (Lv.{ship_level})"
+        ship_color_val = COLOR_GOLD
+    else:
+        ship_text = "船舶: 无"
+        ship_color_val = text_muted
+    draw.text((status_col2_x, status_row1_y), ship_text, font=content_font, fill=ship_color_val)
+
     # 左列第二行：自动钓鱼状态
     auto_fishing = user_data.get('auto_fishing_enabled', False)
     if auto_fishing:
@@ -640,4 +652,5 @@ def get_user_state_data(user_repo, inventory_repo, item_template_repo, log_repo,
         'steal_total_value': steal_total_value,
         'signed_in_today': signed_in_today,
         'pond_info': pond_info,
+        'ship_level': getattr(user, 'ship_level', 0),
     }

@@ -19,6 +19,7 @@ from .core.repositories.sqlite_log_repo import SqliteLogRepository
 from .core.repositories.sqlite_achievement_repo import SqliteAchievementRepository
 from .core.repositories.sqlite_user_buff_repo import SqliteUserBuffRepository
 from .core.repositories.sqlite_exchange_repo import SqliteExchangeRepository
+from .core.repositories.sqlite_ship_repo import SqliteShipRepository
 
 from .core.services.data_setup_service import DataSetupService
 from .core.services.item_template_service import ItemTemplateService
@@ -33,6 +34,7 @@ from .core.services.game_mechanics_service import GameMechanicsService
 from .core.services.effect_manager import EffectManager
 from .core.services.fishing_zone_service import FishingZoneService
 from .core.services.exchange_service import ExchangeService
+from .core.services.ship_service import ShipService
 
 from .core.database.migration import run_migrations
 
@@ -197,6 +199,7 @@ class FishingPlugin(Star):
         self.achievement_repo = SqliteAchievementRepository(db_path)
         self.buff_repo = SqliteUserBuffRepository(db_path)
         self.exchange_repo = SqliteExchangeRepository(db_path)
+        self.ship_repo = SqliteShipRepository(db_path)
 
         # --- 3. 组合根：实例化所有服务层，并注入依赖 ---
         self.fishing_zone_service = FishingZoneService(self.item_template_repo, self.inventory_repo, self.game_config)
@@ -216,9 +219,13 @@ class FishingPlugin(Star):
                                            self.item_template_repo, self.exchange_repo, self.game_config)
         self.achievement_service = AchievementService(self.achievement_repo, self.user_repo, self.inventory_repo,
                                                      self.item_template_repo, self.log_repo)
+        self.ship_service = ShipService(
+            self.user_repo, self.ship_repo, self.item_template_repo, self.inventory_repo
+        )
         self.fishing_service = FishingService(
             self.user_repo, self.inventory_repo, self.item_template_repo,
             self.log_repo, self.buff_repo, self.fishing_zone_service, self.game_config,
+            ship_service=self.ship_service,
         )
 
         # 导入并初始化水族箱服务
@@ -261,7 +268,7 @@ class FishingPlugin(Star):
         self.exchange_service.start_daily_price_update_task()
 
         # --- 5. 初始化核心游戏数据 ---
-        data_setup_service = DataSetupService(self.item_template_repo, self.gacha_repo, self.shop_repo)
+        data_setup_service = DataSetupService(self.item_template_repo, self.gacha_repo, self.shop_repo, ship_repo=self.ship_repo)
         data_setup_service.setup_initial_data()
         try:
             data_setup_service.create_initial_items()
@@ -460,6 +467,18 @@ class FishingPlugin(Star):
     @filter.command("鱼类图鉴", alias={"图鉴"})
     async def fish_pokedex(self, event: AstrMessageEvent):
         async for r in self.fishing_handlers.fish_pokedex(event):
+            yield r
+
+    # =========== 船舶系统 ==========
+
+    @filter.command("我的船", alias={"船舶", "我的船舶", "船"})
+    async def my_ship(self, event: AstrMessageEvent):
+        async for r in common_handlers.my_ship(self, event):
+            yield r
+
+    @filter.command("购买船", alias={"购买船舶", "买船", "升级船", "升级船舶"})
+    async def buy_ship(self, event: AstrMessageEvent):
+        async for r in common_handlers.buy_ship(self, event):
             yield r
 
     # =========== 市场与商店 ==========

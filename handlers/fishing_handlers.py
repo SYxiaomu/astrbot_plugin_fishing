@@ -192,9 +192,15 @@ class FishingHandlers:
                 for zone in zones:
                     status_icon = "📍"if zone["whether_in_use"] else "⬜"
                     active_icon = "✅"if zone["is_active"] else "❌"
+                    zone_type = zone.get('zone_type', 'land')
+                    type_tag = '🌊海洋' if zone_type == 'ocean' else '🏞️陆地'
 
-                    message += f"{status_icon} {zone['zone_id']}. {zone['name']} {active_icon}\n"
+                    message += f"{status_icon} {zone['zone_id']}. {zone['name']} {active_icon} ({type_tag})\n"
                     message += f"   💰 钓鱼费用：{zone['fishing_cost']} 金币\n"
+
+                    if zone_type == 'ocean':
+                        required_ship = zone.get('required_ship_level', 1)
+                        message += f"   🚢 需要船舶等级：Lv.{required_ship}\n"
 
                     if zone["requires_pass"]:
                         message += f"   🔑 需要通行证：{zone['required_item_name']}\n"

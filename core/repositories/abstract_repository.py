@@ -11,7 +11,8 @@ from ..domain.models import (
     FishingRecord, GachaRecord, WipeBombLog, MarketListing, TaxRecord,
     GachaPool, GachaPoolItem, FishingZone, UserBuff, AquariumUpgrade,
     ShopOffer, ShopOfferCost, ShopOfferReward,
-    Commodity, Exchange, UserCommodity  # 新增交易所模型导入
+    Commodity, Exchange, UserCommodity,  # 新增交易所模型导入
+    Ship, UserShip  # 新增船舶模型导入
 )
 
 # 定义用户成就进度的数据结构
@@ -137,6 +138,9 @@ class AbstractItemTemplateRepository(ABC):
     # 删除鱼类模板
     @abstractmethod
     def delete_fish_template(self, fish_id: int) -> None: pass
+    # 清空所有鱼类模板
+    @abstractmethod
+    def delete_all_fish(self) -> None: pass
     # 添加鱼饵模板
     @abstractmethod
     def add_bait_template(self, bait_data: Dict[str, Any]) -> Bait: pass
@@ -728,4 +732,48 @@ class AbstractShopRepository(ABC):
     @abstractmethod
     def get_offer_by_id(self, offer_id: int) -> Optional[Dict[str, Any]]:
         """根据ID获取商品（兼容旧接口）"""
+        pass
+
+
+class AbstractShipRepository(ABC):
+    """船舶数据仓储接口"""
+
+    @abstractmethod
+    def get_all_ships(self) -> List[Ship]:
+        """获取所有船舶模板"""
+        pass
+
+    @abstractmethod
+    def get_ship_by_level(self, level: int) -> Optional[Ship]:
+        """根据等级获取船舶模板"""
+        pass
+
+    @abstractmethod
+    def get_ship_by_id(self, ship_id: int) -> Optional[Ship]:
+        """根据ID获取船舶模板"""
+        pass
+
+    @abstractmethod
+    def add_ship(self, ship_data: Dict[str, Any]) -> Ship:
+        """添加船舶模板"""
+        pass
+
+    @abstractmethod
+    def update_ship(self, ship_id: int, ship_data: Dict[str, Any]) -> None:
+        """更新船舶模板"""
+        pass
+
+    @abstractmethod
+    def delete_ship(self, ship_id: int) -> None:
+        """删除船舶模板"""
+        pass
+
+    @abstractmethod
+    def get_user_ship(self, user_id: str) -> Optional[UserShip]:
+        """获取用户的船舶信息"""
+        pass
+
+    @abstractmethod
+    def upsert_user_ship(self, user_ship: UserShip) -> None:
+        """创建或更新用户的船舶信息"""
         pass

@@ -72,7 +72,7 @@ class SqliteItemTemplateRepository(AbstractItemTemplateRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO items (name, description, rarity, effect_description, cost, is_consumable, icon_url, effect_type, effect_payload)
+                INSERT OR IGNORE INTO items (name, description, rarity, effect_description, cost, is_consumable, icon_url, effect_type, effect_payload)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -268,9 +268,9 @@ class SqliteItemTemplateRepository(AbstractItemTemplateRepository):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO fish (name, description, rarity, base_value, min_weight, max_weight, icon_url)
-                VALUES (:name, :description, :rarity, :base_value, :min_weight, :max_weight, :icon_url)
-            """, {**data, "icon_url": data.get("icon_url")})
+                INSERT OR IGNORE INTO fish (name, description, rarity, base_value, min_weight, max_weight, icon_url, zone_tag)
+                VALUES (:name, :description, :rarity, :base_value, :min_weight, :max_weight, :icon_url, :zone_tag)
+            """, {**data, "icon_url": data.get("icon_url"), "zone_tag": data.get("zone_tag")})
             conn.commit()
 
     def update_fish_template(self, fish_id: int, data: Dict[str, Any]) -> None:
@@ -281,15 +281,21 @@ class SqliteItemTemplateRepository(AbstractItemTemplateRepository):
                 UPDATE fish SET
                     name = :name, description = :description, rarity = :rarity,
                     base_value = :base_value, min_weight = :min_weight,
-                    max_weight = :max_weight, icon_url = :icon_url
+                    max_weight = :max_weight, icon_url = :icon_url, zone_tag = :zone_tag
                 WHERE fish_id = :fish_id
-            """, {**data, "icon_url": data.get("icon_url")})
+            """, {**data, "icon_url": data.get("icon_url"), "zone_tag": data.get("zone_tag")})
             conn.commit()
 
     def delete_fish_template(self, fish_id: int) -> None:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM fish WHERE fish_id = ?", (fish_id,))
+            conn.commit()
+
+    def delete_all_fish(self) -> None:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM fish")
             conn.commit()
 
     # --- Rod Admin CRUD ---
@@ -301,7 +307,7 @@ class SqliteItemTemplateRepository(AbstractItemTemplateRepository):
             if durability_value == "":
                 durability_value = None
             cursor.execute("""
-                INSERT INTO rods (name, description, rarity, source, purchase_cost,
+                INSERT OR IGNORE INTO rods (name, description, rarity, source, purchase_cost,
                                   bonus_fish_quality_modifier, bonus_fish_quantity_modifier,
                                   bonus_rare_fish_chance, durability, icon_url)
                 VALUES (:name, :description, :rarity, :source, :purchase_cost,
@@ -357,7 +363,7 @@ class SqliteItemTemplateRepository(AbstractItemTemplateRepository):
                 "is_consumable": 1 if "is_consumable" in data else 0
             }
             cursor.execute("""
-                INSERT INTO baits (
+                INSERT OR IGNORE INTO baits (
                     name, description, rarity, effect_description, duration_minutes, cost, required_rod_rarity,
                     success_rate_modifier, rare_chance_modifier, garbage_reduction_modifier,
                     value_modifier, quantity_modifier, is_consumable
@@ -412,7 +418,7 @@ class SqliteItemTemplateRepository(AbstractItemTemplateRepository):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO accessories (name, description, rarity, slot_type, bonus_fish_quality_modifier,
+                INSERT OR IGNORE INTO accessories (name, description, rarity, slot_type, bonus_fish_quality_modifier,
                                          bonus_fish_quantity_modifier, bonus_rare_fish_chance,
                                          bonus_coin_modifier, other_bonus_description, icon_url)
                 VALUES (:name, :description, :rarity, :slot_type, :bonus_fish_quality_modifier,
@@ -448,7 +454,7 @@ class SqliteItemTemplateRepository(AbstractItemTemplateRepository):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO items (name, description, rarity, effect_description, cost, is_consumable, icon_url)
+                INSERT OR IGNORE INTO items (name, description, rarity, effect_description, cost, is_consumable, icon_url)
                 VALUES (:name, :description, :rarity, :effect_description, :cost, :is_consumable, :icon_url)
             """, {
                 **data,
@@ -484,7 +490,7 @@ class SqliteItemTemplateRepository(AbstractItemTemplateRepository):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO titles (title_id, name, description, display_format)
+                INSERT OR IGNORE INTO titles (title_id, name, description, display_format)
                 VALUES (:title_id, :name, :description, :display_format)
             """, data)
             conn.commit()

@@ -2,6 +2,7 @@ from ..repositories.abstract_repository import (
     AbstractItemTemplateRepository,
     AbstractGachaRepository,
     AbstractShopRepository,
+    AbstractShipRepository,
 )
 from ..initial_data import (
     FISH_DATA,
@@ -12,6 +13,7 @@ from ..initial_data import (
     GACHA_POOL,
     ITEM_DATA,
     SHOP_DATA,
+    SHIP_DATA,
 )
 from ..domain.models import Item
 from astrbot.api import logger
@@ -25,6 +27,7 @@ class DataSetupService:
         item_template_repo: AbstractItemTemplateRepository,
         gacha_repo: AbstractGachaRepository,
         shop_repo: AbstractShopRepository,
+        ship_repo: AbstractShipRepository = None,
     ):
         """
         初始化数据设置服务。
@@ -33,10 +36,12 @@ class DataSetupService:
             item_template_repo: 物品模板仓储的实例，用于与数据库交互。
             gacha_repo: 抽卡仓储的实例。
             shop_repo: 商店仓储的实例。
+            ship_repo: 船舶仓储的实例。
         """
         self.gacha_repo = gacha_repo
         self.item_template_repo = item_template_repo
         self.shop_repo = shop_repo
+        self.ship_repo = ship_repo
 
     def setup_initial_data(self):
         """
@@ -46,8 +51,15 @@ class DataSetupService:
         try:
             existing_fish = self.item_template_repo.get_all_fish()
             if existing_fish:
-                logger.info("数据库核心数据已存在，跳过初始化。")
-                return
+                if len(existing_fish) >= len(FISH_DATA):
+                    logger.info(f"数据库核心数据已存在（{len(existing_fish)} 条），跳过初始化。")
+                    return
+                else:
+                    logger.warning(f"鱼类数据不完整（期望 {len(FISH_DATA)} 条，实际 {len(existing_fish)} 条），将清空重插...")
+                    try:
+                        self.item_template_repo.delete_all_fish()
+                    except Exception as cleanup_err:
+                        logger.error(f"清空鱼类数据失败: {cleanup_err}")
         except Exception as e:
             # 如果表不存在等数据库错误，也需要继续执行创建和插入
             logger.error(f"检查数据时发生错误 (可能是表不存在，将继续初始化): {e}")
@@ -56,15 +68,17 @@ class DataSetupService:
 
         # 填充鱼类数据
         for fish in FISH_DATA:
-            self.item_template_repo.add_fish_template({
+            fish_dict = {
                 "name": fish[0],
                 "description": fish[1],
                 "rarity": fish[2],
                 "base_value": fish[3],
                 "min_weight": fish[4],
                 "max_weight": fish[5],
-                "icon_url": fish[6]
-            })
+                "icon_url": fish[7] if len(fish) > 7 else None,
+                "zone_tag": fish[6] if len(fish) > 6 else None
+            }
+            self.item_template_repo.add_fish_template(fish_dict)
 
         # 填充鱼饵数据
         for bait in BAIT_DATA:
@@ -164,6 +178,33 @@ class DataSetupService:
             logger.info("初始商店与商品填充完成。")
 
         logger.info("核心游戏数据初始化完成。")
+
+        # 初始化船舶数据
+        self._sync_ship_data()
+
+    def _sync_ship_data(self):
+        """同步船舶数据（如果船舶表为空）"""
+        if not self.ship_repo:
+            return
+        try:
+            existing_ships = self.ship_repo.get_all_ships()
+            if existing_ships:
+                logger.info(f"船舶数据已存在（{len(existing_ships)} 条），跳过初始化。")
+                return
+
+            logger.info("正在初始化船舶数据...")
+            for ship in SHIP_DATA:
+                self.ship_repo.add_ship({
+                    "name": ship[0],
+                    "level": ship[1],
+                    "description": ship[2],
+                    "cost_coins": ship[3],
+                    "required_fish": ship[4],
+                    "max_ocean_zone_level": ship[5],
+                })
+            logger.info(f"船舶数据初始化完成，共 {len(SHIP_DATA)} 条。")
+        except Exception as e:
+            logger.error(f"船舶数据初始化失败: {e}")
 
     def sync_shops_from_initial_data(self):
         """

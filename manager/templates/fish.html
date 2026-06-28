@@ -31,6 +31,7 @@
                         <th>稀有度</th>
                         <th>价值</th>
                         <th>重量范围 (g)</th>
+                        <th>区域标签</th>
                         <th>描述</th>
                         <th class="text-end">操作</th>
                     </tr>
@@ -43,6 +44,17 @@
                         <td>{{ '★' * item.rarity }}</td>
                         <td>{{ item.base_value }}</td>
                         <td>{{ item.min_weight }} - {{ item.max_weight }}</td>
+                        <td>
+                            {% if item.zone_tag %}
+                                {% for tag in zone_tags %}
+                                    {% if tag.value == item.zone_tag %}
+                                        <span class="badge bg-info">{{ tag.label }}</span>
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                <span class="badge bg-secondary">无</span>
+                            {% endif %}
+                        </td>
                         <td>{{ item.description or '无' }}</td>
                         <td class="text-end">
                             <button class="btn btn-sm btn-info edit-btn"
@@ -101,6 +113,15 @@
                             <input type="number" id="max_weight" name="max_weight" class="form-control" required>
                         </div>
                          <div class="col-12">
+                            <label for="zone_tag" class="form-label">区域标签</label>
+                            <select id="zone_tag" name="zone_tag" class="form-control">
+                                {% for tag in zone_tags %}
+                                    <option value="{{ tag.value }}">{{ tag.label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">设置该鱼属于哪个区域标签，用于按区域筛选鱼类</div>
+                        </div>
+                        <div class="col-12">
                             <label for="icon_url" class="form-label">图标URL (可选)</label>
                             <input type="text" id="icon_url" name="icon_url" class="form-control">
                         </div>

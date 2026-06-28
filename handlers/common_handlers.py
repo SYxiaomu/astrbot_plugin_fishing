@@ -380,3 +380,84 @@ async def set_card_bg(self: "FishingPlugin", event: AstrMessageEvent):
     except Exception as e:
         logger.error(f"保存卡片背景失败: {e}")
         yield event.plain_result(f"❌ 保存卡片背景失败：{e}")
+
+
+async def my_ship(self: "FishingPlugin", event: AstrMessageEvent):
+    """查看我的船舶信息"""
+    user_id = self._get_effective_user_id(event)
+    user = self.user_repo.get_by_id(user_id)
+    if not user:
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
+
+    from ..core.services.ship_service import ShipService
+    ship_service: ShipService = getattr(self, 'ship_service', None)
+    if not ship_service:
+        yield event.plain_result("❌ 船舶系统暂不可用。")
+        return
+
+    result = ship_service.get_user_ship_info(user_id)
+    if not result.get('success'):
+        yield event.plain_result(f"❌ {result['message']}")
+        return
+
+    current_level = result.get('current_level', 0)
+    lines = ["🚢 **我的船舶**\n"]
+    
+    if current_level == 0:
+        lines.append("⚠️ 您还没有船舶！")
+        lines.append("💡 使用 /购买船 购买第一艘船（独木舟）\n")
+    else:
+        lines.append(f"📌 当前船舶等级: {current_level}\n")
+    
+    for ship in result.get('ships', []):
+        lines.append(f"**{ship['name']}** (Lv.{ship['level']})")
+        lines.append(f"  📝 {ship['description']}")
+        if ship['status'] == '已拥有':
+            lines.append(f"  ✅ {ship['status']}")
+        elif ship['status'] == '当前使用':
+            lines.append(f"  ✅ {ship['status']}")
+        elif ship['status'] == '可升级':
+            coins_ok = "✅" if ship.get('can_afford') else "❌"
+            lines.append(f"  💰 费用: {ship['cost_coins']:,} 金币 {coins_ok}")
+            required_fish = ship.get('required_fish', [])
+            for req in required_fish:
+                lines.append(f"  🐟 需要 {req.get('tag', req.get('fish_tag', '?'))} 区域鱼 x{req.get('quantity', 1)}")
+            lines.append(f"  📌 可前往海域等级: {ship.get('max_ocean_zone', 1)}")
+        else:
+            lines.append(f"  🔒 需要先购买/升级前级船舶")
+        lines.append("")
+    
+    message = '\n'.join(lines)
+    image = await draw_message_image(
+        message, title_text="🚢 船舶信息",
+        user_id=user_id, nickname=user.nickname or user_id, data_dir=self.data_dir,
+        status_type="success" if current_level > 0 else "info"
+    )
+    image_path = save_message_image(image, "ship_info", self.data_dir)
+    yield event.image_result(image_path)
+
+
+async def buy_ship(self: "FishingPlugin", event: AstrMessageEvent):
+    """购买/升级船舶"""
+    user_id = self._get_effective_user_id(event)
+    user = self.user_repo.get_by_id(user_id)
+    if not user:
+        yield event.plain_result("❌ 您还没有注册，请先使用 /注册 命令注册。")
+        return
+
+    from ..core.services.ship_service import ShipService
+    ship_service: ShipService = getattr(self, 'ship_service', None)
+    if not ship_service:
+        yield event.plain_result("❌ 船舶系统暂不可用。")
+        return
+
+    result = ship_service.buy_or_upgrade_ship(user_id)
+    status = "success" if result.get("success") else "error"
+    image = await draw_message_image(
+        result.get("message", "未知结果"), title_text="🚢 购买船舶",
+        user_id=user_id, nickname=user.nickname or user_id, data_dir=self.data_dir,
+        status_type=status
+    )
+    image_path = save_message_image(image, "buy_ship", self.data_dir)
+    yield event.image_result(image_path)

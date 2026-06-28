@@ -7,6 +7,24 @@ from datetime import datetime, timedelta
 # ---------------------------------
 
 @dataclass
+class Ship:
+    """船舶模板"""
+    ship_id: int
+    name: str
+    level: int  # 1-5
+    description: str
+    cost_coins: int
+    required_fish: Optional[str] = None  # JSON: [{"fish_tag": "xxx", "quantity": 5}]
+    max_ocean_zone_level: int = 1
+
+@dataclass
+class UserShip:
+    """用户船舶实例"""
+    user_id: str
+    ship_level: int  # 0=没有船, 1-5=船舶等级
+    obtained_at: Optional[datetime] = None
+
+@dataclass
 class Fish:
     """代表一种鱼的模板信息"""
     fish_id: int
@@ -17,6 +35,8 @@ class Fish:
     max_weight: int
     description: Optional[str] = None
     icon_url: Optional[str] = None
+    zone_tag: Optional[str] = None  # 区域标签，用于后台筛选
+
 
 @dataclass
 class Bait:
@@ -216,6 +236,8 @@ class User:
     fishing_zone_id: int = 1  # 默认钓鱼区域ID
     exchange_account_status: bool = False # 交易所账户状态
 
+    # 船舶等级（0=没有船）
+    ship_level: int = 0
     max_wipe_bomb_multiplier: float = 0.0
     min_wipe_bomb_multiplier: Optional[float] = None
 
@@ -390,6 +412,10 @@ class FishingZone:
     requires_pass: bool = False  # 是否需要通行证
     # 钓鱼消耗相关字段
     fishing_cost: int = 10  # 在该区域钓鱼消耗的金币
+    # 区域类型与船舶需求
+    zone_type: str = 'land'  # 'land' 或 'ocean'
+    required_ship_level: int = 0  # 访问该区域需要的船舶等级
+    bg_image_path: Optional[str] = None  # 区域背景图路径
 
     def __post_init__(self):
         if isinstance(self.is_active, int):
