@@ -391,7 +391,6 @@ async def draw_state_image(user_data: Dict[str, Any], data_dir: str) -> Image.Im
         auto_color = success_color
         if auto_start_time:
             try:
-                from datetime import datetime
                 # 处理时区问题
                 now = datetime.now()
                 if hasattr(auto_start_time, 'tzinfo') and auto_start_time.tzinfo is not None:
